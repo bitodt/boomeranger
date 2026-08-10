@@ -10,8 +10,10 @@ import com.boomeranger.app.data.ExportRepository
 import com.boomeranger.app.data.VideoMetadataReader
 import com.boomeranger.app.domain.BoomerangExportUseCase
 import com.boomeranger.app.model.BoomerangUiState
+import com.boomeranger.app.model.ExportFormat
 import com.boomeranger.app.model.ExportSettings
 import com.boomeranger.app.model.ExportStage
+import com.boomeranger.app.model.FrameRateOption
 import com.boomeranger.app.model.RepeatCount
 import com.boomeranger.app.model.ResolutionOption
 import com.boomeranger.app.model.VideoMetadata
@@ -91,6 +93,14 @@ class BoomerangViewModel(
         _uiState.update { it.copy(settings = it.settings.copy(resolution = option)) }
     }
 
+    fun setFrameRate(option: FrameRateOption) {
+        _uiState.update { it.copy(settings = it.settings.copy(frameRate = option)) }
+    }
+
+    fun setFormat(format: ExportFormat) {
+        _uiState.update { it.copy(settings = it.settings.copy(format = format)) }
+    }
+
     fun setMuteAudio(mute: Boolean) {
         _uiState.update { it.copy(settings = it.settings.copy(muteAudio = mute)) }
     }
@@ -151,7 +161,7 @@ class BoomerangViewModel(
 
     /**
      * Returns to the starting screen, clearing the selected clip and export result.
-     * Export settings (repeat / resolution / mute) are preserved.
+     * Export settings are preserved.
      */
     fun goHome() {
         exportJob?.cancel()
@@ -162,8 +172,8 @@ class BoomerangViewModel(
     }
 
     fun buildShareIntent(): Intent? {
-        val file = _uiState.value.result?.outputFile ?: return null
-        return exportRepository.buildShareIntent(file)
+        val result = _uiState.value.result ?: return null
+        return exportRepository.buildShareIntent(result.outputFile, result.mimeType)
     }
 
     fun buildOpenIntent(): Intent? {
@@ -173,7 +183,7 @@ class BoomerangViewModel(
             "${getApplication<Application>().packageName}.fileprovider",
             result.outputFile
         )
-        return exportRepository.buildViewIntent(uri)
+        return exportRepository.buildViewIntent(uri, result.mimeType)
     }
 
     fun saveAgain() {

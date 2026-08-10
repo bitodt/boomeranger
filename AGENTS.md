@@ -106,6 +106,8 @@ SAF Uri
 | Repeat options (2/3/4) | `model/RepeatCount.kt` + UI selector |
 | Resolution caps | `model/ResolutionOption.kt` + `util/OutputSizeResolver.kt` |
 | Bitrate heuristic | `util/BitrateCalculator.kt` |
+| Frame rate options (30/60) | `model/FrameRateOption.kt` + UI selector + `BitmapFrameExtractor` |
+| Export format (MP4/GIF) | `model/ExportFormat.kt` + `GifSequenceEncoder.kt` + use case branch |
 | Mute default | `model/ExportSettings.kt` |
 | Reverse quality (JPEG 95, fps) | `media/BitmapFrameExtractor.kt`, `FrameSequenceEncoder.kt` |
 | Concat / Media3 mime / HDR mode | `media/Media3TransformHelper.kt` |

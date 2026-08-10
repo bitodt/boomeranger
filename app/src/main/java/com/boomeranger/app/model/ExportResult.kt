@@ -9,4 +9,7 @@ data class ExportResult(
     val width: Int,
     val height: Int,
     val durationMs: Long,
-)
+    val format: ExportFormat = ExportFormat.MP4,
+) {
+    val mimeType: String get() = format.mimeType
+}

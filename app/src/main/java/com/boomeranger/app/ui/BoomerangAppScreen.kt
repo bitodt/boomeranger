@@ -56,10 +56,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.boomeranger.app.data.VideoPickerManager
 import com.boomeranger.app.model.BoomerangUiState
+import com.boomeranger.app.model.ExportFormat
 import com.boomeranger.app.model.ExportStage
+import com.boomeranger.app.model.FrameRateOption
 import com.boomeranger.app.model.RepeatCount
 import com.boomeranger.app.model.ResolutionOption
 import com.boomeranger.app.model.VideoMetadata
+import com.boomeranger.app.ui.components.GifPlayer
 import com.boomeranger.app.ui.components.SegmentedSelector
 import com.boomeranger.app.ui.components.VideoPlayer
 import com.boomeranger.app.ui.theme.Danger
@@ -110,6 +113,7 @@ fun BoomerangAppScreen(viewModel: BoomerangViewModel) {
                     ResultPanel(
                         resultUri = result.mediaStoreUri
                             ?: Uri.fromFile(result.outputFile),
+                        format = result.format,
                         aspectRatio = if (result.height > 0) {
                             result.width.toFloat() / result.height.toFloat()
                         } else {
@@ -153,6 +157,8 @@ fun BoomerangAppScreen(viewModel: BoomerangViewModel) {
                         state = state,
                         onRepeat = viewModel::setRepeatCount,
                         onResolution = viewModel::setResolution,
+                        onFrameRate = viewModel::setFrameRate,
+                        onFormat = viewModel::setFormat,
                         onMute = viewModel::setMuteAudio,
                         onExport = viewModel::export,
                     )
@@ -281,14 +287,24 @@ private fun ExportSettingsPanel(
     state: BoomerangUiState,
     onRepeat: (RepeatCount) -> Unit,
     onResolution: (ResolutionOption) -> Unit,
+    onFrameRate: (FrameRateOption) -> Unit,
+    onFormat: (ExportFormat) -> Unit,
     onMute: (Boolean) -> Unit,
     onExport: () -> Unit,
 ) {
+    val isGif = state.settings.format == ExportFormat.GIF
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(
             text = "Export settings",
             style = MaterialTheme.typography.headlineMedium,
             color = Mist,
+        )
+        Text("Format", style = MaterialTheme.typography.titleMedium, color = Sand)
+        SegmentedSelector(
+            options = ExportFormat.entries,
+            selected = state.settings.format,
+            labelOf = { it.label },
+            onSelected = onFormat,
         )
         Text("Repeat count", style = MaterialTheme.typography.titleMedium, color = Sand)
         SegmentedSelector(
@@ -297,6 +313,13 @@ private fun ExportSettingsPanel(
             labelOf = { it.label },
             onSelected = onRepeat,
         )
+        Text("Frame rate", style = MaterialTheme.typography.titleMedium, color = Sand)
+        SegmentedSelector(
+            options = FrameRateOption.entries,
+            selected = state.settings.frameRate,
+            labelOf = { "${it.label} fps" },
+            onSelected = onFrameRate,
+        )
         Text("Resolution", style = MaterialTheme.typography.titleMedium, color = Sand)
         SegmentedSelector(
             options = ResolutionOption.entries,
@@ -304,30 +327,38 @@ private fun ExportSettingsPanel(
             labelOf = { it.label },
             onSelected = onResolution,
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "Mute exported audio",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Mist,
-                )
-                Text(
-                    "Recommended: reverse audio is not synthesized.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Mist.copy(alpha = 0.65f),
+        if (!isGif) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Mute exported audio",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Mist,
+                    )
+                    Text(
+                        "Recommended: reverse audio is not synthesized.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Mist.copy(alpha = 0.65f),
+                    )
+                }
+                Switch(
+                    checked = state.settings.muteAudio,
+                    onCheckedChange = onMute,
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = Leaf,
+                        checkedThumbColor = Ink,
+                    ),
                 )
             }
-            Switch(
-                checked = state.settings.muteAudio,
-                onCheckedChange = onMute,
-                colors = SwitchDefaults.colors(
-                    checkedTrackColor = Leaf,
-                    checkedThumbColor = Ink,
-                ),
+        } else {
+            Text(
+                "GIF exports are silent. High resolution + 60 fps can create large files.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Mist.copy(alpha = 0.65f),
             )
         }
         Button(
@@ -336,7 +367,7 @@ private fun ExportSettingsPanel(
             colors = ButtonDefaults.buttonColors(containerColor = Leaf, contentColor = Ink),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Export boomerang")
+            Text(if (isGif) "Export GIF" else "Export boomerang")
         }
     }
 }
@@ -388,6 +419,7 @@ private fun ExportProgressPanel(state: BoomerangUiState, onRetry: () -> Unit) {
 @Composable
 private fun ResultPanel(
     resultUri: Uri,
+    format: ExportFormat,
     aspectRatio: Float,
     onBack: () -> Unit,
     onShare: () -> Unit,
@@ -407,7 +439,7 @@ private fun ResultPanel(
                 )
             }
             Text(
-                text = "Result",
+                text = if (format == ExportFormat.GIF) "GIF result" else "Result",
                 style = MaterialTheme.typography.headlineMedium,
                 color = Mist,
                 modifier = Modifier.weight(1f),
@@ -416,7 +448,10 @@ private fun ResultPanel(
         TextButton(onClick = onBack) {
             Text("Create another boomerang", color = Leaf)
         }
-        VideoPlayer(uri = resultUri, aspectRatio = aspectRatio)
+        when (format) {
+            ExportFormat.GIF -> GifPlayer(uri = resultUri, aspectRatio = aspectRatio)
+            ExportFormat.MP4 -> VideoPlayer(uri = resultUri, aspectRatio = aspectRatio)
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = onSave,
