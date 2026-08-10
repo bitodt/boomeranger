@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp"
+    android:height="288dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Soft ground wash for the splash icon plate -->
+    <path
+        android:fillColor="#163028"
+        android:pathData="M18,18h72v72h-72z" />
+    <!-- Boomerang / loop mark -->
+    <path
+        android:fillColor="#E8F4F0"
+        android:pathData="M54,28c-11.6,0 -21,9.4 -21,21v5c0,2.8 2.2,5 5,5h9v10c0,3.9 3.1,7 7,7s7,-3.1 7,-7V59h9c2.8,0 5,-2.2 5,-5v-5c0,-11.6 -9.4,-21 -21,-21z" />
+    <path
+        android:fillColor="#2BB673"
+        android:pathData="M32,68c0,12.2 9.8,22 22,22s22,-9.8 22,-22h-9c0,7.2 -5.8,13 -13,13s-13,-5.8 -13,-13z" />
+    <path
+        android:fillColor="#D8C3A5"
+        android:fillAlpha="0.85"
+        android:pathData="M54,40c-4.4,0 -8,3.6 -8,8v2h4v-2c0,-2.2 1.8,-4 4,-4s4,1.8 4,4v2h4v-2c0,-4.4 -3.6,-8 -8,-8z" />
+</vector>

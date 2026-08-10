@@ -68,6 +68,7 @@ com.boomeranger.app
 - `domain/BoomerangExportUseCase.kt` — end-to-end orchestration + progress stages
 - `ui/BoomerangViewModel.kt` — UI state machine
 - `ui/BoomerangAppScreen.kt` — home, metadata, settings, progress, result
+- `ui/BoomerangerSplash.kt` — branded Compose splash (after AndroidX SplashScreen handoff)
 
 ## Media pipeline (detailed)
 

@@ -2,6 +2,7 @@ package com.boomeranger.app.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -21,11 +22,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Share
@@ -33,6 +36,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -70,6 +74,13 @@ import java.util.Locale
 fun BoomerangAppScreen(viewModel: BoomerangViewModel) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val showingResult = state.result != null
+    val canNavigateHome =
+        !state.isExporting && (showingResult || state.selectedVideo != null)
+
+    BackHandler(enabled = canNavigateHome) {
+        viewModel.goHome()
+    }
 
     val picker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -87,59 +98,69 @@ fun BoomerangAppScreen(viewModel: BoomerangViewModel) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // Keep content clear of status bar, cutouts, and gesture/nav bars.
+                .safeDrawingPadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 28.dp),
+                .padding(horizontal = 20.dp)
+                .padding(top = 16.dp, bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            HomeHeader(
-                onPickVideo = { VideoPickerManager.launchCompose(picker) },
-                enabled = !state.isExporting,
-            )
+            if (showingResult) {
+                state.result?.let { result ->
+                    ResultPanel(
+                        resultUri = result.mediaStoreUri
+                            ?: Uri.fromFile(result.outputFile),
+                        aspectRatio = if (result.height > 0) {
+                            result.width.toFloat() / result.height.toFloat()
+                        } else {
+                            16f / 9f
+                        },
+                        onBack = viewModel::goHome,
+                        onShare = {
+                            viewModel.buildShareIntent()?.let { intent ->
+                                context.startActivity(
+                                    Intent.createChooser(intent, "Share boomerang")
+                                )
+                            }
+                        },
+                        onSave = viewModel::saveAgain,
+                        onOpen = {
+                            viewModel.buildOpenIntent()?.let { intent ->
+                                runCatching { context.startActivity(intent) }
+                            }
+                        },
+                    )
+                }
+            } else {
+                HomeHeader(
+                    onPickVideo = { VideoPickerManager.launchCompose(picker) },
+                    enabled = !state.isExporting,
+                    showBack = state.selectedVideo != null,
+                    onBack = viewModel::goHome,
+                )
 
-            state.selectedVideo?.let { video ->
-                AnimatedVisibility(
-                    visible = true,
-                    enter = fadeIn(tween(400)) + slideInVertically(
-                        animationSpec = tween(450, easing = FastOutSlowInEasing)
-                    ) { it / 4 },
-                ) {
-                    SelectedVideoPanel(video)
+                state.selectedVideo?.let { video ->
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(tween(400)) + slideInVertically(
+                            animationSpec = tween(450, easing = FastOutSlowInEasing)
+                        ) { it / 4 },
+                    ) {
+                        SelectedVideoPanel(video)
+                    }
+
+                    ExportSettingsPanel(
+                        state = state,
+                        onRepeat = viewModel::setRepeatCount,
+                        onResolution = viewModel::setResolution,
+                        onMute = viewModel::setMuteAudio,
+                        onExport = viewModel::export,
+                    )
                 }
 
-                ExportSettingsPanel(
-                    state = state,
-                    onRepeat = viewModel::setRepeatCount,
-                    onResolution = viewModel::setResolution,
-                    onMute = viewModel::setMuteAudio,
-                    onExport = viewModel::export,
-                )
-            }
-
-            if (state.isExporting || state.stage == ExportStage.FAILED) {
-                ExportProgressPanel(state = state, onRetry = viewModel::retryExport)
-            }
-
-            state.result?.let { result ->
-                ResultPanel(
-                    resultUri = result.mediaStoreUri
-                        ?: Uri.fromFile(result.outputFile),
-                    aspectRatio = if (result.height > 0) {
-                        result.width.toFloat() / result.height.toFloat()
-                    } else {
-                        16f / 9f
-                    },
-                    onShare = {
-                        viewModel.buildShareIntent()?.let { intent ->
-                            context.startActivity(Intent.createChooser(intent, "Share boomerang"))
-                        }
-                    },
-                    onSave = viewModel::saveAgain,
-                    onOpen = {
-                        viewModel.buildOpenIntent()?.let { intent ->
-                            runCatching { context.startActivity(intent) }
-                        }
-                    },
-                )
+                if (state.isExporting || state.stage == ExportStage.FAILED) {
+                    ExportProgressPanel(state = state, onRetry = viewModel::retryExport)
+                }
             }
 
             state.infoMessage?.let { InfoBanner(it) }
@@ -151,8 +172,27 @@ fun BoomerangAppScreen(viewModel: BoomerangViewModel) {
 }
 
 @Composable
-private fun HomeHeader(onPickVideo: () -> Unit, enabled: Boolean) {
+private fun HomeHeader(
+    onPickVideo: () -> Unit,
+    enabled: Boolean,
+    showBack: Boolean,
+    onBack: () -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (showBack) {
+            TextButton(
+                onClick = onBack,
+                contentPadding = ButtonDefaults.TextButtonContentPadding,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = null,
+                    tint = Leaf,
+                )
+                Spacer(modifier = Modifier.size(6.dp))
+                Text("Back", color = Leaf)
+            }
+        }
         Text(
             text = "Boomeranger",
             style = MaterialTheme.typography.displayLarge,
@@ -207,7 +247,12 @@ private fun SelectedVideoPanel(video: VideoMetadata) {
                 .background(Moss),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Default.Movie, contentDescription = null, tint = Sand, modifier = Modifier.size(48.dp))
+            Icon(
+                Icons.Default.Movie,
+                contentDescription = null,
+                tint = Sand,
+                modifier = Modifier.size(48.dp),
+            )
         }
 
         MetaRow("File", video.displayName)
@@ -264,8 +309,12 @@ private fun ExportSettingsPanel(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
-                Text("Mute exported audio", style = MaterialTheme.typography.titleMedium, color = Mist)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Mute exported audio",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Mist,
+                )
                 Text(
                     "Recommended: reverse audio is not synthesized.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -340,16 +389,33 @@ private fun ExportProgressPanel(state: BoomerangUiState, onRetry: () -> Unit) {
 private fun ResultPanel(
     resultUri: Uri,
     aspectRatio: Float,
+    onBack: () -> Unit,
     onShare: () -> Unit,
     onSave: () -> Unit,
     onOpen: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            text = "Result",
-            style = MaterialTheme.typography.headlineMedium,
-            color = Mist,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back to start",
+                    tint = Leaf,
+                )
+            }
+            Text(
+                text = "Result",
+                style = MaterialTheme.typography.headlineMedium,
+                color = Mist,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        TextButton(onClick = onBack) {
+            Text("Create another boomerang", color = Leaf)
+        }
         VideoPlayer(uri = resultUri, aspectRatio = aspectRatio)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(

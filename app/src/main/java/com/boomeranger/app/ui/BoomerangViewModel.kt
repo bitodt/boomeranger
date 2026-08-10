@@ -149,6 +149,18 @@ class BoomerangViewModel(
         _uiState.update { it.copy(errorMessage = null) }
     }
 
+    /**
+     * Returns to the starting screen, clearing the selected clip and export result.
+     * Export settings (repeat / resolution / mute) are preserved.
+     */
+    fun goHome() {
+        exportJob?.cancel()
+        exportJob = null
+        _uiState.update { current ->
+            BoomerangUiState(settings = current.settings)
+        }
+    }
+
     fun buildShareIntent(): Intent? {
         val file = _uiState.value.result?.outputFile ?: return null
         return exportRepository.buildShareIntent(file)
