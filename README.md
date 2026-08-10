@@ -22,6 +22,10 @@ Command line:
 ./gradlew :app:installDebug
 ```
 
+## CI
+
+GitHub Actions (`.github/workflows/android-ci.yml`) runs unit tests, builds the debug APK on pushes/PRs, and uploads `boomeranger-debug-apk` as a workflow artifact (30-day retention).
+
 ## How to use
 
 1. Tap **Choose video** and pick a local MP4 (or other Android-readable video).
