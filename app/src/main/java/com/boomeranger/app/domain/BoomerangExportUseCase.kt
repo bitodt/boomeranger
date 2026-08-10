@@ -72,12 +72,13 @@ class BoomerangExportUseCase(
                 ExportFormat.GIF -> 30f
                 ExportFormat.MP4 -> settings.frameRate.fps.toFloat()
             }
+            val speedMultiplier = settings.speed.multiplier
             // GIF always silent; MP4 honors mute toggle.
             val removeAudio = settings.format == ExportFormat.GIF || settings.muteAudio
 
             AppLogger.i(
                 "Export start: file=${metadata.displayName}, " +
-                    "format=${settings.format}, fps=$targetFps, " +
+                    "format=${settings.format}, fps=$targetFps, speed=${speedMultiplier}x, " +
                     "src=${metadata.orientedWidth}x${metadata.orientedHeight}, " +
                     "out=${outputSize.width}x${outputSize.height}, " +
                     "repeats=${settings.repeatCount.value}, mute=$removeAudio"
@@ -119,6 +120,7 @@ class BoomerangExportUseCase(
                         workDir = File(workRoot, "segments"),
                         sourceMetadata = metadata,
                         targetFrameRate = targetFps,
+                        speedMultiplier = speedMultiplier,
                         encodeForwardFromFrames = true,
                         onProgress = { p ->
                             progressListener.onProgress(
@@ -178,6 +180,7 @@ class BoomerangExportUseCase(
                         frameRate = bundle.frameRate,
                         width = bundle.width,
                         height = bundle.height,
+                        speedMultiplier = speedMultiplier,
                         onProgress = { p ->
                             progressListener.onProgress(
                                 ExportStage.ENCODING_GIF,
@@ -185,7 +188,8 @@ class BoomerangExportUseCase(
                             )
                         },
                     )
-                    val frameDelayMs = (1000f / bundle.frameRate).toLong().coerceAtLeast(1L)
+                    val playbackFps = bundle.frameRate * speedMultiplier
+                    val frameDelayMs = (1000f / playbackFps).toLong().coerceAtLeast(1L)
                     durationMs = cycleFrames.size * frameDelayMs
                 }
             }

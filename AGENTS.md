@@ -107,6 +107,7 @@ SAF Uri
 | Resolution caps | `model/ResolutionOption.kt` + `util/OutputSizeResolver.kt` |
 | Bitrate heuristic | `util/BitrateCalculator.kt` |
 | Frame rate options (30/60) | `model/FrameRateOption.kt` + UI selector + `BitmapFrameExtractor` |
+| Speed options (1x/2x/4x) | `model/SpeedOption.kt` + encoder/GIF delay multipliers |
 | Export format (MP4/GIF) | `model/ExportFormat.kt` + `GifSequenceEncoder.kt` + use case branch |
 | Mute default | `model/ExportSettings.kt` |
 | Reverse quality (JPEG 95, fps) | `media/BitmapFrameExtractor.kt`, `FrameSequenceEncoder.kt` |

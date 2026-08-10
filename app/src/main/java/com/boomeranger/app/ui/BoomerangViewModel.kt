@@ -16,6 +16,7 @@ import com.boomeranger.app.model.ExportStage
 import com.boomeranger.app.model.FrameRateOption
 import com.boomeranger.app.model.RepeatCount
 import com.boomeranger.app.model.ResolutionOption
+import com.boomeranger.app.model.SpeedOption
 import com.boomeranger.app.model.VideoMetadata
 import com.boomeranger.app.util.AppLogger
 import kotlinx.coroutines.Job
@@ -102,6 +103,10 @@ class BoomerangViewModel(
                 current.copy(settings = current.settings.copy(frameRate = option))
             }
         }
+    }
+
+    fun setSpeed(option: SpeedOption) {
+        _uiState.update { it.copy(settings = it.settings.copy(speed = option)) }
     }
 
     fun setFormat(format: ExportFormat) {

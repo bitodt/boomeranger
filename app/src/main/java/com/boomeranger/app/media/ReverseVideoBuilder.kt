@@ -60,6 +60,7 @@ class ReverseVideoBuilder(
         workDir: File,
         sourceMetadata: VideoMetadata,
         targetFrameRate: Float,
+        speedMultiplier: Int,
         encodeForwardFromFrames: Boolean,
         onProgress: (Float) -> Unit = {},
     ): ReverseResult {
@@ -67,7 +68,8 @@ class ReverseVideoBuilder(
         val framesDir = File(workDir, "frames").also { it.mkdirs() }
 
         AppLogger.i(
-            "Building segments from ${preparedForwardFile.name} @ ${targetFrameRate}fps"
+            "Building segments from ${preparedForwardFile.name} " +
+                "@ ${targetFrameRate}fps, ${speedMultiplier}x"
         )
 
         val bundle = extractFrames(
@@ -89,6 +91,7 @@ class ReverseVideoBuilder(
                 sourceBitrate = sourceMetadata.bitrate,
                 sourceWidth = sourceMetadata.orientedWidth,
                 sourceHeight = sourceMetadata.orientedHeight,
+                speedMultiplier = speedMultiplier,
                 onProgress = { p -> onProgress(progressBase + p * 0.25f) },
             )
             progressBase = 0.70f
@@ -107,6 +110,7 @@ class ReverseVideoBuilder(
             sourceBitrate = sourceMetadata.bitrate,
             sourceWidth = sourceMetadata.orientedWidth,
             sourceHeight = sourceMetadata.orientedHeight,
+            speedMultiplier = speedMultiplier,
             onProgress = { p -> onProgress(progressBase + p * (1f - progressBase)) },
         )
 

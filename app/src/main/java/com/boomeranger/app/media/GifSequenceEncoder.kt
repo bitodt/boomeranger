@@ -22,6 +22,7 @@ class GifSequenceEncoder {
         frameRate: Float,
         width: Int,
         height: Int,
+        speedMultiplier: Int = 1,
         onProgress: (Float) -> Unit = {},
     ) {
         require(frameFiles.size >= 2) { "GIF needs at least 2 frames." }
@@ -29,8 +30,10 @@ class GifSequenceEncoder {
         if (outputFile.exists()) outputFile.delete()
 
         val fps = frameRate.coerceIn(12f, 60f)
+        val speed = speedMultiplier.coerceIn(1, 4)
+        val playbackFps = (fps * speed).coerceIn(12f, 240f)
         // GIF delay unit is 1/100s.
-        val delayCs = (100f / fps).toInt().coerceIn(2, 20)
+        val delayCs = (100f / playbackFps).toInt().coerceIn(1, 20)
 
         outputFile.outputStream().use { out ->
             writeString(out, "GIF89a")
@@ -60,8 +63,8 @@ class GifSequenceEncoder {
         }
 
         AppLogger.i(
-            "Encoded GIF ${outputFile.name}: ${frameFiles.size} frames @ ${fps}fps, " +
-                "${outputFile.length()} bytes"
+            "Encoded GIF ${outputFile.name}: ${frameFiles.size} frames " +
+                "@ ${playbackFps}fps (${speed}x), ${outputFile.length()} bytes"
         )
     }
 

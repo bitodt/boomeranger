@@ -61,6 +61,7 @@ import com.boomeranger.app.model.ExportStage
 import com.boomeranger.app.model.FrameRateOption
 import com.boomeranger.app.model.RepeatCount
 import com.boomeranger.app.model.ResolutionOption
+import com.boomeranger.app.model.SpeedOption
 import com.boomeranger.app.model.VideoMetadata
 import com.boomeranger.app.ui.components.BoomerangDemoHero
 import com.boomeranger.app.ui.components.GifPlayer
@@ -160,6 +161,7 @@ fun BoomerangAppScreen(viewModel: BoomerangViewModel) {
                         onRepeat = viewModel::setRepeatCount,
                         onResolution = viewModel::setResolution,
                         onFrameRate = viewModel::setFrameRate,
+                        onSpeed = viewModel::setSpeed,
                         onFormat = viewModel::setFormat,
                         onMute = viewModel::setMuteAudio,
                         onExport = viewModel::export,
@@ -295,6 +297,7 @@ private fun ExportSettingsPanel(
     onRepeat: (RepeatCount) -> Unit,
     onResolution: (ResolutionOption) -> Unit,
     onFrameRate: (FrameRateOption) -> Unit,
+    onSpeed: (SpeedOption) -> Unit,
     onFormat: (ExportFormat) -> Unit,
     onMute: (Boolean) -> Unit,
     onExport: () -> Unit,
@@ -319,6 +322,13 @@ private fun ExportSettingsPanel(
             selected = state.settings.repeatCount,
             labelOf = { it.label },
             onSelected = onRepeat,
+        )
+        Text("Speed", style = MaterialTheme.typography.titleMedium, color = Sand)
+        SegmentedSelector(
+            options = SpeedOption.entries,
+            selected = state.settings.speed,
+            labelOf = { it.label },
+            onSelected = onSpeed,
         )
         if (!isGif) {
             Text("Frame rate", style = MaterialTheme.typography.titleMedium, color = Sand)
