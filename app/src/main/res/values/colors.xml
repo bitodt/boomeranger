@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="splash_background">#FF0E1518</color>
+    <color name="ink">#FF0E1518</color>
+    <color name="moss">#FF163028</color>
+    <color name="leaf">#FF2BB673</color>
+    <color name="mist">#FFE8F4F0</color>
+    <color name="sand">#FFD8C3A5</color>
+</resources>
