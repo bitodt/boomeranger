@@ -62,6 +62,7 @@ import com.boomeranger.app.model.FrameRateOption
 import com.boomeranger.app.model.RepeatCount
 import com.boomeranger.app.model.ResolutionOption
 import com.boomeranger.app.model.VideoMetadata
+import com.boomeranger.app.ui.components.BoomerangDemoHero
 import com.boomeranger.app.ui.components.GifPlayer
 import com.boomeranger.app.ui.components.SegmentedSelector
 import com.boomeranger.app.ui.components.VideoPlayer
@@ -141,6 +142,7 @@ fun BoomerangAppScreen(viewModel: BoomerangViewModel) {
                     enabled = !state.isExporting,
                     showBack = state.selectedVideo != null,
                     onBack = viewModel::goHome,
+                    showDemo = state.selectedVideo == null && !state.isExporting,
                 )
 
                 state.selectedVideo?.let { video ->
@@ -183,6 +185,7 @@ private fun HomeHeader(
     enabled: Boolean,
     showBack: Boolean,
     onBack: () -> Unit,
+    showDemo: Boolean,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (showBack) {
@@ -204,11 +207,15 @@ private fun HomeHeader(
             style = MaterialTheme.typography.displayLarge,
             color = Mist,
         )
-        Text(
-            text = "Choose a video up to 3 seconds.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = Mist.copy(alpha = 0.78f),
-        )
+        if (showDemo) {
+            BoomerangDemoHero()
+        } else {
+            Text(
+                text = "Choose a video up to 3 seconds.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Mist.copy(alpha = 0.78f),
+            )
+        }
         Button(
             onClick = onPickVideo,
             enabled = enabled,
@@ -313,13 +320,15 @@ private fun ExportSettingsPanel(
             labelOf = { it.label },
             onSelected = onRepeat,
         )
-        Text("Frame rate", style = MaterialTheme.typography.titleMedium, color = Sand)
-        SegmentedSelector(
-            options = FrameRateOption.entries,
-            selected = state.settings.frameRate,
-            labelOf = { "${it.label} fps" },
-            onSelected = onFrameRate,
-        )
+        if (!isGif) {
+            Text("Frame rate", style = MaterialTheme.typography.titleMedium, color = Sand)
+            SegmentedSelector(
+                options = FrameRateOption.entries,
+                selected = state.settings.frameRate,
+                labelOf = { "${it.label} fps" },
+                onSelected = onFrameRate,
+            )
+        }
         Text("Resolution", style = MaterialTheme.typography.titleMedium, color = Sand)
         SegmentedSelector(
             options = ResolutionOption.entries,
@@ -356,7 +365,7 @@ private fun ExportSettingsPanel(
             }
         } else {
             Text(
-                "GIF exports are silent. High resolution + 60 fps can create large files.",
+                "GIF exports are silent and locked to 30 fps for smaller, smoother loops.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Mist.copy(alpha = 0.65f),
             )

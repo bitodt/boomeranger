@@ -94,11 +94,30 @@ class BoomerangViewModel(
     }
 
     fun setFrameRate(option: FrameRateOption) {
-        _uiState.update { it.copy(settings = it.settings.copy(frameRate = option)) }
+        _uiState.update { current ->
+            // GIF exports are locked to 30 fps.
+            if (current.settings.format == ExportFormat.GIF) {
+                current.copy(settings = current.settings.copy(frameRate = FrameRateOption.FPS_30))
+            } else {
+                current.copy(settings = current.settings.copy(frameRate = option))
+            }
+        }
     }
 
     fun setFormat(format: ExportFormat) {
-        _uiState.update { it.copy(settings = it.settings.copy(format = format)) }
+        _uiState.update { current ->
+            val frameRate = if (format == ExportFormat.GIF) {
+                FrameRateOption.FPS_30
+            } else {
+                current.settings.frameRate
+            }
+            current.copy(
+                settings = current.settings.copy(
+                    format = format,
+                    frameRate = frameRate,
+                )
+            )
+        }
     }
 
     fun setMuteAudio(mute: Boolean) {

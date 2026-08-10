@@ -68,7 +68,10 @@ class BoomerangExportUseCase(
                 sourceHeight = metadata.orientedHeight,
                 option = settings.resolution,
             )
-            val targetFps = settings.frameRate.fps.toFloat()
+            val targetFps = when (settings.format) {
+                ExportFormat.GIF -> 30f
+                ExportFormat.MP4 -> settings.frameRate.fps.toFloat()
+            }
             // GIF always silent; MP4 honors mute toggle.
             val removeAudio = settings.format == ExportFormat.GIF || settings.muteAudio
 
