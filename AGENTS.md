@@ -117,6 +117,7 @@ SAF Uri
 - Emulators may lack hardware encoders; software paths can be slow or fail.
 - Config-change test: rotate during export; ViewModel should keep progress.
 - Longer-than-3s input should show trim info and still export.
+- CI: `.github/workflows/android-ci.yml` builds the debug APK and uploads the `boomeranger-debug-apk` artifact.
 
 ## Non-goals / avoided approaches
 
