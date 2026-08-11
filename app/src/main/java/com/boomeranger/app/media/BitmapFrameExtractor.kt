@@ -12,25 +12,36 @@ import kotlin.math.roundToInt
  * Extracts oriented frames from a prepared clip for reverse encoding / GIF assembly.
  *
  * Uses MediaMetadataRetriever so rotation/display orientation is already applied to bitmaps.
- * Frames are written to disk as JPEG to avoid holding a full ARGB frame list in RAM.
+ *
+ * Storage is hybrid:
+ * - [FrameStorageMode.MEMORY] keeps ARGB bitmaps in RAM (no JPEG round-trip)
+ * - [FrameStorageMode.DISK] writes JPEGs to avoid holding a full frame list in RAM
+ *
+ * If the memory path runs out of RAM mid-extract, callers should fall back to disk
+ * (see [ReverseVideoBuilder]).
  */
 class BitmapFrameExtractor {
 
     data class ExtractionResult(
-        val frameFiles: List<File>,
+        val frames: List<FrameHandle>,
         val width: Int,
         val height: Int,
         val frameRate: Float,
-    )
+        val storageMode: FrameStorageMode,
+    ) {
+        val frameCount: Int get() = frames.size
+    }
 
     /**
      * @param targetFrameRate when set (e.g. 30 or 60), samples the clip at that rate.
      *                        when null, falls back to source capture fps / heuristics.
+     * @param storageMode MEMORY keeps bitmaps; DISK writes JPEG files under [outputDir].
      */
-    fun extractToJpegSequence(
+    fun extract(
         inputFile: File,
         outputDir: File,
         maxDurationMs: Long,
+        storageMode: FrameStorageMode,
         targetFrameRate: Float? = null,
         onProgress: (Float) -> Unit = {},
     ): ExtractionResult {
@@ -38,6 +49,11 @@ class BitmapFrameExtractor {
         outputDir.listFiles()?.forEach { it.delete() }
 
         val retriever = MediaMetadataRetriever()
+        val memoryFrames = if (storageMode == FrameStorageMode.MEMORY) {
+            ArrayList<Bitmap>()
+        } else {
+            null
+        }
         try {
             retriever.setDataSource(inputFile.absolutePath)
 
@@ -80,7 +96,7 @@ class BitmapFrameExtractor {
             val fps = (targetFrameRate ?: inferredFps).coerceIn(12f, 60f)
 
             val expectedFrames = max(2, ((clipDurationMs / 1000.0) * fps).roundToInt())
-            val frameFiles = ArrayList<File>(expectedFrames)
+            val frames = ArrayList<FrameHandle>(expectedFrames)
 
             // Time-based sampling honors the user-selected fps for both 30 and 60 paths.
             val intervalUs = 1_000_000.0 / fps
@@ -93,42 +109,87 @@ class BitmapFrameExtractor {
                     MediaMetadataRetriever.OPTION_CLOSEST
                 )
                 if (bitmap != null) {
-                    val file = File(outputDir, "frame_%05d.jpg".format(index))
-                    writeJpeg(bitmap, file)
-                    bitmap.recycle()
-                    frameFiles += file
+                    when (storageMode) {
+                        FrameStorageMode.MEMORY -> {
+                            memoryFrames!!.add(bitmap)
+                            frames += FrameHandle.Memory(bitmap)
+                        }
+                        FrameStorageMode.DISK -> {
+                            val file = File(outputDir, "frame_%05d.jpg".format(index))
+                            writeJpeg(bitmap, file)
+                            bitmap.recycle()
+                            frames += FrameHandle.Disk(file)
+                        }
+                    }
                     index++
                 }
                 timeUs += intervalUs
                 onProgress((timeUs / endUs).toFloat().coerceIn(0f, 1f))
             }
 
-            if (frameFiles.size < 2) {
+            if (frames.size < 2) {
+                recycleBitmaps(memoryFrames)
                 error("Need at least 2 frames to build a boomerang reverse segment.")
             }
 
+            val (outW, outH) = when (storageMode) {
+                FrameStorageMode.MEMORY -> {
+                    val first = memoryFrames!!.first()
+                    first.width to first.height
+                }
+                FrameStorageMode.DISK -> {
+                    val probe = android.graphics.BitmapFactory.decodeFile(
+                        (frames.first() as FrameHandle.Disk).file.absolutePath
+                    ) ?: error("Failed to decode extracted frame.")
+                    val w = probe.width
+                    val h = probe.height
+                    probe.recycle()
+                    w to h
+                }
+            }
+
             AppLogger.i(
-                "Extracted ${frameFiles.size} frames at ${fps}fps " +
-                    "(target=${targetFrameRate ?: "auto"}), " +
-                    "oriented ${orientedWidth}x$orientedHeight"
+                "Extracted ${frames.size} frames at ${fps}fps " +
+                    "(target=${targetFrameRate ?: "auto"}, storage=$storageMode), " +
+                    "oriented ${orientedWidth}x$orientedHeight → ${outW}x$outH"
             )
 
-            val probe = android.graphics.BitmapFactory.decodeFile(frameFiles.first().absolutePath)
-                ?: error("Failed to decode extracted frame.")
-            val outW = probe.width
-            val outH = probe.height
-            probe.recycle()
+            // Successful memory extract: clear tracker so finally does not recycle.
+            memoryFrames?.clear()
 
             return ExtractionResult(
-                frameFiles = frameFiles,
+                frames = frames,
                 width = outW,
                 height = outH,
                 frameRate = fps,
+                storageMode = storageMode,
             )
+        } catch (oom: OutOfMemoryError) {
+            recycleBitmaps(memoryFrames)
+            throw oom
+        } catch (t: Throwable) {
+            recycleBitmaps(memoryFrames)
+            throw t
         } finally {
             runCatching { retriever.release() }
         }
     }
+
+    /** @deprecated Prefer [extract]; kept name clarity for disk-only call sites. */
+    fun extractToJpegSequence(
+        inputFile: File,
+        outputDir: File,
+        maxDurationMs: Long,
+        targetFrameRate: Float? = null,
+        onProgress: (Float) -> Unit = {},
+    ): ExtractionResult = extract(
+        inputFile = inputFile,
+        outputDir = outputDir,
+        maxDurationMs = maxDurationMs,
+        storageMode = FrameStorageMode.DISK,
+        targetFrameRate = targetFrameRate,
+        onProgress = onProgress,
+    )
 
     private fun writeJpeg(bitmap: Bitmap, file: File) {
         file.outputStream().use { stream ->
@@ -136,5 +197,12 @@ class BitmapFrameExtractor {
                 error("Failed to compress frame to JPEG: ${file.name}")
             }
         }
+    }
+
+    private fun recycleBitmaps(bitmaps: MutableList<Bitmap>?) {
+        bitmaps?.forEach { bmp ->
+            if (!bmp.isRecycled) bmp.recycle()
+        }
+        bitmaps?.clear()
     }
 }

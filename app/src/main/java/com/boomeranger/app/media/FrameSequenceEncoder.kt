@@ -1,7 +1,5 @@
 package com.boomeranger.app.media
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
@@ -12,12 +10,13 @@ import java.io.File
 import java.nio.ByteBuffer
 
 /**
- * Encodes an ordered list of JPEG frame files into an H.264/MP4 video track (no audio).
+ * Encodes an ordered list of frames (in-memory bitmaps or JPEG files) into an H.264/MP4
+ * video track (no audio).
  */
 class FrameSequenceEncoder {
 
     fun encode(
-        frameFiles: List<File>,
+        frames: List<FrameHandle>,
         outputFile: File,
         width: Int,
         height: Int,
@@ -28,7 +27,7 @@ class FrameSequenceEncoder {
         speedMultiplier: Int = 1,
         onProgress: (Float) -> Unit = {},
     ) {
-        require(frameFiles.size >= 2) { "At least 2 frames required." }
+        require(frames.size >= 2) { "At least 2 frames required." }
         require(width > 0 && height > 0) { "Invalid encode size." }
 
         val evenWidth = width and -2
@@ -85,33 +84,29 @@ class FrameSequenceEncoder {
                 if (!inputDone) {
                     val inIndex = encoder.dequeueInputBuffer(10_000)
                     if (inIndex >= 0) {
-                        if (inputIndex >= frameFiles.size) {
+                        if (inputIndex >= frames.size) {
                             encoder.queueInputBuffer(
                                 inIndex,
                                 0,
                                 0,
-                                frameDurationUs * frameFiles.size,
+                                frameDurationUs * frames.size,
                                 MediaCodec.BUFFER_FLAG_END_OF_STREAM
                             )
                             inputDone = true
                         } else {
-                            val bitmap = decodeScaledFrame(
-                                frameFiles[inputIndex],
-                                evenWidth,
-                                evenHeight
-                            )
+                            val opened = frames[inputIndex].openBitmap(evenWidth, evenHeight)
                             try {
                                 val image = encoder.getInputImage(inIndex)
                                     ?: error("Encoder did not provide an input Image")
-                                YuvConverter.fillImageFromBitmap(image, bitmap)
+                                YuvConverter.fillImageFromBitmap(image, opened.bitmap)
                                 // Standard I420/NV12 payload size; plane capacities may include padding.
                                 val payloadSize = evenWidth * evenHeight * 3 / 2
                                 val pts = frameDurationUs * inputIndex
                                 encoder.queueInputBuffer(inIndex, 0, payloadSize, pts, 0)
                                 inputIndex++
-                                onProgress(inputIndex.toFloat() / frameFiles.size * 0.7f)
+                                onProgress(inputIndex.toFloat() / frames.size * 0.7f)
                             } finally {
-                                bitmap.recycle()
+                                opened.recycleIfOwned()
                             }
                         }
                     }
@@ -142,14 +137,14 @@ class FrameSequenceEncoder {
                             outputDone = true
                         }
                         onProgress(
-                            0.7f + (inputIndex.toFloat() / frameFiles.size).coerceAtMost(1f) * 0.3f
+                            0.7f + (inputIndex.toFloat() / frames.size).coerceAtMost(1f) * 0.3f
                         )
                     }
                 }
             }
 
             AppLogger.i(
-                "Encoded ${frameFiles.size} frames to ${outputFile.name} " +
+                "Encoded ${frames.size} frames to ${outputFile.name} " +
                     "@ ${playbackFps}fps (${speed}x), ${bitrate}bps"
             )
         } finally {
@@ -160,16 +155,5 @@ class FrameSequenceEncoder {
             }
             runCatching { muxer?.release() }
         }
-    }
-
-    private fun decodeScaledFrame(file: File, width: Int, height: Int): Bitmap {
-        val decoded = BitmapFactory.decodeFile(file.absolutePath)
-            ?: error("Failed to decode ${file.name}")
-        if (decoded.width == width && decoded.height == height) {
-            return decoded
-        }
-        val scaled = Bitmap.createScaledBitmap(decoded, width, height, true)
-        if (scaled !== decoded) decoded.recycle()
-        return scaled
     }
 }

@@ -1,7 +1,6 @@
 package com.boomeranger.app.media
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Color
 import com.boomeranger.app.util.AppLogger
 import java.io.File
@@ -9,7 +8,7 @@ import java.io.OutputStream
 import kotlin.math.min
 
 /**
- * Encodes a JPEG frame sequence into a looping GIF89a animation.
+ * Encodes a frame sequence (in-memory bitmaps or JPEG files) into a looping GIF89a.
  *
  * Uses a per-frame popularity palette (256 colors) + LZW. Suitable for short
  * boomerang clips; large resolution × high fps exports can produce big files.
@@ -17,7 +16,7 @@ import kotlin.math.min
 class GifSequenceEncoder {
 
     fun encode(
-        frameFiles: List<File>,
+        frames: List<FrameHandle>,
         outputFile: File,
         frameRate: Float,
         width: Int,
@@ -25,7 +24,7 @@ class GifSequenceEncoder {
         speedMultiplier: Int = 1,
         onProgress: (Float) -> Unit = {},
     ) {
-        require(frameFiles.size >= 2) { "GIF needs at least 2 frames." }
+        require(frames.size >= 2) { "GIF needs at least 2 frames." }
         outputFile.parentFile?.mkdirs()
         if (outputFile.exists()) outputFile.delete()
 
@@ -40,22 +39,14 @@ class GifSequenceEncoder {
             writeLogicalScreen(out, width, height)
             writeNetscapeLoop(out)
 
-            frameFiles.forEachIndexed { index, file ->
-                val decoded = BitmapFactory.decodeFile(file.absolutePath)
-                    ?: error("Failed to decode ${file.name}")
-                val bitmap = if (decoded.width == width && decoded.height == height) {
-                    decoded
-                } else {
-                    Bitmap.createScaledBitmap(decoded, width, height, true).also {
-                        if (it !== decoded) decoded.recycle()
-                    }
-                }
+            frames.forEachIndexed { index, frame ->
+                val opened = frame.openBitmap(width, height)
                 try {
-                    writeFrame(out, bitmap, delayCs)
+                    writeFrame(out, opened.bitmap, delayCs)
                 } finally {
-                    bitmap.recycle()
+                    opened.recycleIfOwned()
                 }
-                onProgress((index + 1).toFloat() / frameFiles.size)
+                onProgress((index + 1).toFloat() / frames.size)
             }
 
             out.write(0x3B) // trailer
@@ -63,7 +54,7 @@ class GifSequenceEncoder {
         }
 
         AppLogger.i(
-            "Encoded GIF ${outputFile.name}: ${frameFiles.size} frames " +
+            "Encoded GIF ${outputFile.name}: ${frames.size} frames " +
                 "@ ${playbackFps}fps (${speed}x), ${outputFile.length()} bytes"
         )
     }

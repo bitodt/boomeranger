@@ -16,6 +16,8 @@ import com.boomeranger.app.model.ExportSettings
 import com.boomeranger.app.model.ExportStage
 import com.boomeranger.app.model.VideoMetadata
 import com.boomeranger.app.util.AppLogger
+import com.boomeranger.app.util.AvailableMemoryReader
+import com.boomeranger.app.util.ClipWindowResolver
 import com.boomeranger.app.util.OutputSizeResolver
 import com.boomeranger.app.util.UriFileCopier
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +38,9 @@ class BoomerangExportUseCase(
     private val uriFileCopier: UriFileCopier = UriFileCopier(context),
     private val transformHelper: Media3TransformHelper = Media3TransformHelper(context),
     private val forwardClipPreparer: ForwardClipPreparer = ForwardClipPreparer(transformHelper),
-    private val reverseVideoBuilder: ReverseVideoBuilder = ReverseVideoBuilder(),
+    private val reverseVideoBuilder: ReverseVideoBuilder = ReverseVideoBuilder(
+        memoryReader = AvailableMemoryReader(context),
+    ),
     private val concatenationService: VideoConcatenationService =
         VideoConcatenationService(transformHelper),
     private val gifEncoder: GifSequenceEncoder = GifSequenceEncoder(),
@@ -116,6 +120,12 @@ class BoomerangExportUseCase(
             val outWidth: Int
             val outHeight: Int
 
+            val clipWindow = ClipWindowResolver.resolve(
+                sourceDurationMs = metadata.durationMs,
+                requestedStartMs = trimStartMs,
+            )
+            val clipDurationMs = clipWindow.durationMs
+
             when (settings.format) {
                 ExportFormat.MP4 -> {
                     val segments = reverseVideoBuilder.buildSegments(
@@ -125,6 +135,9 @@ class BoomerangExportUseCase(
                         targetFrameRate = targetFps,
                         speedMultiplier = speedMultiplier,
                         encodeForwardFromFrames = true,
+                        outputWidth = outputSize.width,
+                        outputHeight = outputSize.height,
+                        clipDurationMs = clipDurationMs,
                         onProgress = { p ->
                             progressListener.onProgress(
                                 ExportStage.GENERATING_REVERSE,
@@ -135,24 +148,29 @@ class BoomerangExportUseCase(
                     outWidth = segments.width
                     outHeight = segments.height
 
-                    progressListener.onProgress(ExportStage.CONCATENATING, 0.62f)
-                    ensureActive()
-                    val forwardForConcat = segments.forwardFile
-                        ?: error("Forward re-encode missing for MP4 export.")
-                    concatenationService.concatenateBoomerang(
-                        forwardFile = forwardForConcat,
-                        reverseFile = segments.reverseFile,
-                        repeatCount = settings.repeatCount.value,
-                        outputFile = finalFile,
-                        removeAudio = removeAudio,
-                        onProgress = { p ->
-                            progressListener.onProgress(
-                                ExportStage.EXPORTING,
-                                0.62f + p * 0.28f
-                            )
-                        },
-                    )
-                    durationMs = readDurationMs(finalFile)
+                    try {
+                        progressListener.onProgress(ExportStage.CONCATENATING, 0.62f)
+                        ensureActive()
+                        val forwardForConcat = segments.forwardFile
+                            ?: error("Forward re-encode missing for MP4 export.")
+                        concatenationService.concatenateBoomerang(
+                            forwardFile = forwardForConcat,
+                            reverseFile = segments.reverseFile,
+                            repeatCount = settings.repeatCount.value,
+                            outputFile = finalFile,
+                            removeAudio = removeAudio,
+                            onProgress = { p ->
+                                progressListener.onProgress(
+                                    ExportStage.EXPORTING,
+                                    0.62f + p * 0.28f
+                                )
+                            },
+                        )
+                        durationMs = readDurationMs(finalFile)
+                    } finally {
+                        // Frames are no longer needed after F/R encodes finish.
+                        segments.frameBundle.release()
+                    }
                 }
 
                 ExportFormat.GIF -> {
@@ -161,6 +179,9 @@ class BoomerangExportUseCase(
                         preparedForwardFile = preparedForward,
                         framesDir = framesDir,
                         targetFrameRate = targetFps,
+                        outputWidth = outputSize.width,
+                        outputHeight = outputSize.height,
+                        clipDurationMs = clipDurationMs,
                         onProgress = { p ->
                             progressListener.onProgress(
                                 ExportStage.GENERATING_REVERSE,
@@ -171,29 +192,33 @@ class BoomerangExportUseCase(
                     outWidth = bundle.width
                     outHeight = bundle.height
 
-                    progressListener.onProgress(ExportStage.ENCODING_GIF, 0.60f)
-                    ensureActive()
-                    val cycleFrames = reverseVideoBuilder.buildBoomerangFrameCycle(
-                        forwardFrames = bundle.forwardFrames,
-                        repeatCount = settings.repeatCount.value,
-                    )
-                    gifEncoder.encode(
-                        frameFiles = cycleFrames,
-                        outputFile = finalFile,
-                        frameRate = bundle.frameRate,
-                        width = bundle.width,
-                        height = bundle.height,
-                        speedMultiplier = speedMultiplier,
-                        onProgress = { p ->
-                            progressListener.onProgress(
-                                ExportStage.ENCODING_GIF,
-                                0.60f + p * 0.30f
-                            )
-                        },
-                    )
-                    val playbackFps = bundle.frameRate * speedMultiplier
-                    val frameDelayMs = (1000f / playbackFps).toLong().coerceAtLeast(1L)
-                    durationMs = cycleFrames.size * frameDelayMs
+                    try {
+                        progressListener.onProgress(ExportStage.ENCODING_GIF, 0.60f)
+                        ensureActive()
+                        val cycleFrames = reverseVideoBuilder.buildBoomerangFrameCycle(
+                            forwardFrames = bundle.frames,
+                            repeatCount = settings.repeatCount.value,
+                        )
+                        gifEncoder.encode(
+                            frames = cycleFrames,
+                            outputFile = finalFile,
+                            frameRate = bundle.frameRate,
+                            width = bundle.width,
+                            height = bundle.height,
+                            speedMultiplier = speedMultiplier,
+                            onProgress = { p ->
+                                progressListener.onProgress(
+                                    ExportStage.ENCODING_GIF,
+                                    0.60f + p * 0.30f
+                                )
+                            },
+                        )
+                        val playbackFps = bundle.frameRate * speedMultiplier
+                        val frameDelayMs = (1000f / playbackFps).toLong().coerceAtLeast(1L)
+                        durationMs = cycleFrames.size * frameDelayMs
+                    } finally {
+                        bundle.release()
+                    }
                 }
             }
 
