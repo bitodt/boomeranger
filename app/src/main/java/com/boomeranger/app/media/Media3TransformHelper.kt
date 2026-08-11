@@ -122,16 +122,20 @@ class Media3TransformHelper(private val context: Context) {
 
     fun buildTrimmedScaledItem(
         inputUri: String,
+        startPositionMs: Long,
         endPositionMs: Long,
         outputWidth: Int,
         outputHeight: Int,
         removeAudio: Boolean,
     ): EditedMediaItem {
+        require(endPositionMs > startPositionMs) {
+            "Invalid clip window: $startPositionMs → $endPositionMs"
+        }
         val mediaItem = MediaItem.Builder()
             .setUri(inputUri)
             .setClippingConfiguration(
                 MediaItem.ClippingConfiguration.Builder()
-                    .setStartPositionMs(0)
+                    .setStartPositionMs(startPositionMs.coerceAtLeast(0L))
                     .setEndPositionMs(endPositionMs)
                     .build()
             )

@@ -4,10 +4,11 @@ import androidx.media3.common.util.UnstableApi
 import com.boomeranger.app.model.VideoMetadata
 import com.boomeranger.app.model.VideoSize
 import com.boomeranger.app.util.AppLogger
+import com.boomeranger.app.util.ClipWindowResolver
 import java.io.File
 
 /**
- * Trims to max duration, applies optional downscale, and removes audio when requested
+ * Trims to a ≤3s window, applies optional downscale, and removes audio when requested
  * using Media3 Transformer — where it is strongest.
  */
 @UnstableApi
@@ -21,17 +22,23 @@ class ForwardClipPreparer(
         outputSize: VideoSize,
         removeAudio: Boolean,
         outputFile: File,
+        trimStartMs: Long = 0L,
         onProgress: (Float) -> Unit = {},
     ): File {
-        val endMs = minOf(metadata.durationMs, VideoMetadata.MAX_INPUT_DURATION_MS)
+        val window = ClipWindowResolver.resolve(
+            sourceDurationMs = metadata.durationMs,
+            requestedStartMs = trimStartMs,
+        )
         AppLogger.i(
-            "Preparing forward clip: endMs=$endMs, size=${outputSize.width}x${outputSize.height}, " +
+            "Preparing forward clip: ${window.startMs}→${window.endMs}ms " +
+                "(${window.durationMs}ms), size=${outputSize.width}x${outputSize.height}, " +
                 "mute=$removeAudio"
         )
 
         val edited = transformHelper.buildTrimmedScaledItem(
             inputUri = inputFile.absolutePath,
-            endPositionMs = endMs,
+            startPositionMs = window.startMs,
+            endPositionMs = window.endMs,
             outputWidth = outputSize.width,
             outputHeight = outputSize.height,
             removeAudio = removeAudio,

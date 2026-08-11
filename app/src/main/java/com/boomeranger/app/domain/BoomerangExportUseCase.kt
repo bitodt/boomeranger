@@ -47,6 +47,7 @@ class BoomerangExportUseCase(
     suspend fun export(
         metadata: VideoMetadata,
         settings: ExportSettings,
+        trimStartMs: Long = 0L,
         progressListener: ExportProgressListener,
     ): ExportResult = withContext(Dispatchers.Default) {
         val workRoot = File(
@@ -79,6 +80,7 @@ class BoomerangExportUseCase(
             AppLogger.i(
                 "Export start: file=${metadata.displayName}, " +
                     "format=${settings.format}, fps=$targetFps, speed=${speedMultiplier}x, " +
+                    "trimStartMs=$trimStartMs, " +
                     "src=${metadata.orientedWidth}x${metadata.orientedHeight}, " +
                     "out=${outputSize.width}x${outputSize.height}, " +
                     "repeats=${settings.repeatCount.value}, mute=$removeAudio"
@@ -93,6 +95,7 @@ class BoomerangExportUseCase(
                 outputSize = outputSize,
                 removeAudio = removeAudio,
                 outputFile = preparedForward,
+                trimStartMs = trimStartMs,
                 onProgress = { p ->
                     progressListener.onProgress(
                         ExportStage.PREPARING_FORWARD,

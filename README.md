@@ -34,7 +34,7 @@ GitHub Actions (`.github/workflows/android-ci.yml`) runs unit tests, builds the 
 4. Keep **Mute exported audio** on for video unless you intentionally want forward audio retained (GIF is always silent).
 5. Tap **Export boomerang** / **Export GIF**, watch stage progress, then preview / save / share.
 
-Videos longer than 3 seconds are accepted but trimmed to the **first 3 seconds** with an on-screen notice.
+Videos longer than 3 seconds: scrub to choose which 3-second window to use (preview included). Clips already ≤3 seconds use the full video.
 
 ## Resolution rules
 

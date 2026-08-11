@@ -71,18 +71,27 @@ class BoomerangViewModel(
     private fun handleMetadata(metadata: VideoMetadata) {
         val info = when {
             metadata.exceedsMaxDuration ->
-                "Video is longer than 3 seconds. Export will use the first 3 seconds."
+                "Pick any 3-second window from this clip below."
             else -> null
         }
         _uiState.update {
             it.copy(
                 selectedVideo = metadata,
+                trimStartMs = 0L,
                 stage = ExportStage.IDLE,
                 progress = 0f,
                 infoMessage = info,
                 errorMessage = null,
                 result = null,
             )
+        }
+    }
+
+    fun setTrimStartMs(startMs: Long) {
+        val duration = _uiState.value.selectedVideo?.durationMs ?: return
+        val maxStart = (duration - VideoMetadata.MAX_INPUT_DURATION_MS).coerceAtLeast(0L)
+        _uiState.update {
+            it.copy(trimStartMs = startMs.coerceIn(0L, maxStart))
         }
     }
 
@@ -148,6 +157,7 @@ class BoomerangViewModel(
                 exportUseCase.export(
                     metadata = metadata,
                     settings = _uiState.value.settings,
+                    trimStartMs = _uiState.value.trimStartMs,
                     progressListener = { stage, progress ->
                         _uiState.update {
                             it.copy(stage = stage, progress = progress.coerceIn(0f, 1f))

@@ -64,6 +64,7 @@ import com.boomeranger.app.model.ResolutionOption
 import com.boomeranger.app.model.SpeedOption
 import com.boomeranger.app.model.VideoMetadata
 import com.boomeranger.app.ui.components.BoomerangDemoHero
+import com.boomeranger.app.ui.components.ClipWindowPicker
 import com.boomeranger.app.ui.components.GifPlayer
 import com.boomeranger.app.ui.components.SegmentedSelector
 import com.boomeranger.app.ui.components.VideoPlayer
@@ -155,6 +156,18 @@ fun BoomerangAppScreen(viewModel: BoomerangViewModel) {
                     ) {
                         SelectedVideoPanel(video)
                     }
+
+                    ClipWindowPicker(
+                        uri = video.uri,
+                        durationMs = video.durationMs,
+                        trimStartMs = state.trimStartMs,
+                        onTrimStartChanged = viewModel::setTrimStartMs,
+                        aspectRatio = if (video.orientedHeight > 0) {
+                            video.orientedWidth.toFloat() / video.orientedHeight.toFloat()
+                        } else {
+                            16f / 9f
+                        },
+                    )
 
                     ExportSettingsPanel(
                         state = state,

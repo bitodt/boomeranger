@@ -102,7 +102,8 @@ SAF Uri
 
 | Behavior | Primary file(s) |
 |----------|-----------------|
-| Max input duration (3s) | `model/VideoMetadata.kt` (`MAX_INPUT_DURATION_MS`) + use case trim |
+| Max input duration (3s) | `model/VideoMetadata.kt` (`MAX_INPUT_DURATION_MS`) + `ClipWindowResolver` / trim UI |
+| Trim window start | `BoomerangUiState.trimStartMs` + `ClipWindowPicker` + `ForwardClipPreparer` |
 | Repeat options (2/3/4) | `model/RepeatCount.kt` + UI selector |
 | Resolution caps | `model/ResolutionOption.kt` + `util/OutputSizeResolver.kt` |
 | Bitrate heuristic | `util/BitrateCalculator.kt` |
