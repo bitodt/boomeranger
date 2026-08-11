@@ -102,10 +102,14 @@ SAF Uri
 
 | Behavior | Primary file(s) |
 |----------|-----------------|
-| Max input duration (3s) | `model/VideoMetadata.kt` (`MAX_INPUT_DURATION_MS`) + use case trim |
+| Max input duration (3s) | `model/VideoMetadata.kt` (`MAX_INPUT_DURATION_MS`) + `ClipWindowResolver` / trim UI |
+| Trim window start | `BoomerangUiState.trimStartMs` + `ClipWindowPicker` + `ForwardClipPreparer` |
 | Repeat options (2/3/4) | `model/RepeatCount.kt` + UI selector |
 | Resolution caps | `model/ResolutionOption.kt` + `util/OutputSizeResolver.kt` |
 | Bitrate heuristic | `util/BitrateCalculator.kt` |
+| Frame rate options (30/60) | `model/FrameRateOption.kt` + UI selector + `BitmapFrameExtractor` |
+| Speed options (1x/2x/4x) | `model/SpeedOption.kt` + encoder/GIF delay multipliers |
+| Export format (MP4/GIF) | `model/ExportFormat.kt` + `GifSequenceEncoder.kt` + use case branch |
 | Mute default | `model/ExportSettings.kt` |
 | Reverse quality (JPEG 95, fps) | `media/BitmapFrameExtractor.kt`, `FrameSequenceEncoder.kt` |
 | Concat / Media3 mime / HDR mode | `media/Media3TransformHelper.kt` |

@@ -7,6 +7,7 @@ enum class ExportStage(val label: String) {
     GENERATING_REVERSE("Generating reverse segment"),
     CONCATENATING("Building boomerang cycles"),
     EXPORTING("Exporting final video"),
+    ENCODING_GIF("Encoding GIF"),
     SAVING("Saving to storage"),
     COMPLETED("Completed"),
     FAILED("Failed"),

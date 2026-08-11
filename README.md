@@ -30,11 +30,11 @@ GitHub Actions (`.github/workflows/android-ci.yml`) runs unit tests, builds the 
 
 1. Tap **Choose video** and pick a local MP4 (or other Android-readable video).
 2. Review thumbnail, filename, duration, resolution, and frame rate.
-3. Choose repeat count (`2` / `3` / `4`) and resolution (`Original` / `FHD max` / `HD max`).
-4. Keep **Mute exported audio** on unless you intentionally want forward audio retained on the prepared forward segment (reverse remains silent; default mute is recommended).
-5. Tap **Export boomerang**, watch stage progress, then preview / save / share.
+3. Choose format (`Video` / `GIF`), repeat count (`2` / `3` / `4`), speed (`1x` / `2x` / `4x`), frame rate (`30` / `60` for video; GIF is locked to 30), and resolution (`Original` / `FHD max` / `HD max`).
+4. Keep **Mute exported audio** on for video unless you intentionally want forward audio retained (GIF is always silent).
+5. Tap **Export boomerang** / **Export GIF**, watch stage progress, then preview / save / share.
 
-Videos longer than 3 seconds are accepted but trimmed to the **first 3 seconds** with an on-screen notice.
+Videos longer than 3 seconds: scrub to choose which 3-second window to use (preview included). Clips already ≤3 seconds use the full video.
 
 ## Resolution rules
 

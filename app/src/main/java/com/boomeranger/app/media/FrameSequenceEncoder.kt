@@ -25,6 +25,7 @@ class FrameSequenceEncoder {
         sourceBitrate: Int?,
         sourceWidth: Int,
         sourceHeight: Int,
+        speedMultiplier: Int = 1,
         onProgress: (Float) -> Unit = {},
     ) {
         require(frameFiles.size >= 2) { "At least 2 frames required." }
@@ -37,10 +38,13 @@ class FrameSequenceEncoder {
         if (outputFile.exists()) outputFile.delete()
 
         val fps = frameRate.coerceIn(12f, 60f)
+        val speed = speedMultiplier.coerceIn(1, 4)
+        // Faster export = same frames with shorter duration / higher playback fps.
+        val playbackFps = (fps * speed).coerceIn(12f, 240f)
         val bitrate = BitrateCalculator.calculateBitsPerSecond(
             width = evenWidth,
             height = evenHeight,
-            frameRate = fps,
+            frameRate = playbackFps.coerceAtMost(60f),
             sourceBitrate = sourceBitrate,
             sourceWidth = sourceWidth,
             sourceHeight = sourceHeight,
@@ -56,7 +60,7 @@ class FrameSequenceEncoder {
                 MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible
             )
             setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
-            setFloat(MediaFormat.KEY_FRAME_RATE, fps)
+            setFloat(MediaFormat.KEY_FRAME_RATE, playbackFps)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
         }
 
@@ -75,7 +79,7 @@ class FrameSequenceEncoder {
             var inputIndex = 0
             var outputDone = false
             var inputDone = false
-            val frameDurationUs = (1_000_000.0 / fps).toLong().coerceAtLeast(1L)
+            val frameDurationUs = (1_000_000.0 / playbackFps).toLong().coerceAtLeast(1L)
 
             while (!outputDone) {
                 if (!inputDone) {
@@ -144,7 +148,10 @@ class FrameSequenceEncoder {
                 }
             }
 
-            AppLogger.i("Encoded ${frameFiles.size} frames to ${outputFile.name} @ ${bitrate}bps")
+            AppLogger.i(
+                "Encoded ${frameFiles.size} frames to ${outputFile.name} " +
+                    "@ ${playbackFps}fps (${speed}x), ${bitrate}bps"
+            )
         } finally {
             runCatching { encoder.stop() }
             runCatching { encoder.release() }

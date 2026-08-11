@@ -10,10 +10,13 @@ import com.boomeranger.app.data.ExportRepository
 import com.boomeranger.app.data.VideoMetadataReader
 import com.boomeranger.app.domain.BoomerangExportUseCase
 import com.boomeranger.app.model.BoomerangUiState
+import com.boomeranger.app.model.ExportFormat
 import com.boomeranger.app.model.ExportSettings
 import com.boomeranger.app.model.ExportStage
+import com.boomeranger.app.model.FrameRateOption
 import com.boomeranger.app.model.RepeatCount
 import com.boomeranger.app.model.ResolutionOption
+import com.boomeranger.app.model.SpeedOption
 import com.boomeranger.app.model.VideoMetadata
 import com.boomeranger.app.util.AppLogger
 import kotlinx.coroutines.Job
@@ -68,12 +71,13 @@ class BoomerangViewModel(
     private fun handleMetadata(metadata: VideoMetadata) {
         val info = when {
             metadata.exceedsMaxDuration ->
-                "Video is longer than 3 seconds. Export will use the first 3 seconds."
+                "Pick any 3-second window from this clip below."
             else -> null
         }
         _uiState.update {
             it.copy(
                 selectedVideo = metadata,
+                trimStartMs = 0L,
                 stage = ExportStage.IDLE,
                 progress = 0f,
                 infoMessage = info,
@@ -83,12 +87,51 @@ class BoomerangViewModel(
         }
     }
 
+    fun setTrimStartMs(startMs: Long) {
+        val duration = _uiState.value.selectedVideo?.durationMs ?: return
+        val maxStart = (duration - VideoMetadata.MAX_INPUT_DURATION_MS).coerceAtLeast(0L)
+        _uiState.update {
+            it.copy(trimStartMs = startMs.coerceIn(0L, maxStart))
+        }
+    }
+
     fun setRepeatCount(count: RepeatCount) {
         _uiState.update { it.copy(settings = it.settings.copy(repeatCount = count)) }
     }
 
     fun setResolution(option: ResolutionOption) {
         _uiState.update { it.copy(settings = it.settings.copy(resolution = option)) }
+    }
+
+    fun setFrameRate(option: FrameRateOption) {
+        _uiState.update { current ->
+            // GIF exports are locked to 30 fps.
+            if (current.settings.format == ExportFormat.GIF) {
+                current.copy(settings = current.settings.copy(frameRate = FrameRateOption.FPS_30))
+            } else {
+                current.copy(settings = current.settings.copy(frameRate = option))
+            }
+        }
+    }
+
+    fun setSpeed(option: SpeedOption) {
+        _uiState.update { it.copy(settings = it.settings.copy(speed = option)) }
+    }
+
+    fun setFormat(format: ExportFormat) {
+        _uiState.update { current ->
+            val frameRate = if (format == ExportFormat.GIF) {
+                FrameRateOption.FPS_30
+            } else {
+                current.settings.frameRate
+            }
+            current.copy(
+                settings = current.settings.copy(
+                    format = format,
+                    frameRate = frameRate,
+                )
+            )
+        }
     }
 
     fun setMuteAudio(mute: Boolean) {
@@ -114,6 +157,7 @@ class BoomerangViewModel(
                 exportUseCase.export(
                     metadata = metadata,
                     settings = _uiState.value.settings,
+                    trimStartMs = _uiState.value.trimStartMs,
                     progressListener = { stage, progress ->
                         _uiState.update {
                             it.copy(stage = stage, progress = progress.coerceIn(0f, 1f))
@@ -151,7 +195,7 @@ class BoomerangViewModel(
 
     /**
      * Returns to the starting screen, clearing the selected clip and export result.
-     * Export settings (repeat / resolution / mute) are preserved.
+     * Export settings are preserved.
      */
     fun goHome() {
         exportJob?.cancel()
@@ -162,8 +206,8 @@ class BoomerangViewModel(
     }
 
     fun buildShareIntent(): Intent? {
-        val file = _uiState.value.result?.outputFile ?: return null
-        return exportRepository.buildShareIntent(file)
+        val result = _uiState.value.result ?: return null
+        return exportRepository.buildShareIntent(result.outputFile, result.mimeType)
     }
 
     fun buildOpenIntent(): Intent? {
@@ -173,7 +217,7 @@ class BoomerangViewModel(
             "${getApplication<Application>().packageName}.fileprovider",
             result.outputFile
         )
-        return exportRepository.buildViewIntent(uri)
+        return exportRepository.buildViewIntent(uri, result.mimeType)
     }
 
     fun saveAgain() {
