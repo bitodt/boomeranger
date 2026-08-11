@@ -45,6 +45,14 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
 
+      - name: Verify stable debug signing cert
+        run: |
+          CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs \
+            app/build/outputs/apk/debug/app-debug.apk)"
+          echo "$CERT"
+          echo "$CERT" | grep -qi 'CN=Boomeranger Debug'
+          echo "$CERT" | grep -qi 'ace59ad6d965e339fb7f290b3e931e6d71f35835d434f5893414f3e15cd16739'
+
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v7
         with:
