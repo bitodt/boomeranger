@@ -216,6 +216,8 @@ class ReverseVideoBuilder(
                 totalMemBytes = 0L,
                 lowMemory = true,
                 memoryClassBytes = 0L,
+                heapMaxBytes = 0L,
+                heapUsedBytes = 0L,
             )
         return FrameStoragePolicy.decide(
             width = width,

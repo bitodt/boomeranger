@@ -9,8 +9,11 @@ import kotlin.math.roundToInt
  *
  * Hybrid rules:
  * 1. Soft budget — prefer disk above ~720p or above 30 fps.
- * 2. Runtime memory — require enough [availMemBytes] headroom; honor [lowMemory].
- * 3. Low-end heap — very small [memoryClassBytes] always uses disk.
+ * 2. App heap — [availMemBytes] is *system* RAM and is not the process heap.
+ *    In-memory storage must fit in remaining Java/ART heap or extraction GC-thrashes
+ *    and appears to hang.
+ * 3. Runtime memory — honor [lowMemory]; still require system RAM headroom.
+ * 4. Low-end heap — very small [memoryClassBytes] always uses disk.
  */
 object FrameStoragePolicy {
 
@@ -26,6 +29,13 @@ object FrameStoragePolicy {
     /** Absolute ARGB storage cap even when availMem looks high. */
     const val MAX_MEMORY_STORAGE_BYTES: Long = 384L * 1024L * 1024L
 
+    /**
+     * Never spend more than this fraction of the process heap on the ARGB frame list.
+     * HD@30 for 3s is ~316MB; a typical largeHeap is 256–512MB, so that clip must
+     * stay on disk.
+     */
+    const val MAX_HEAP_STORAGE_FRACTION: Double = 0.40
+
     /** Devices below this memory class skip the RAM path. */
     const val MIN_MEMORY_CLASS_BYTES: Long = 192L * 1024L * 1024L
 
@@ -40,7 +50,14 @@ object FrameStoragePolicy {
         val totalMemBytes: Long,
         val lowMemory: Boolean,
         val memoryClassBytes: Long,
-    )
+        /** [Runtime.maxMemory] — process heap cap, not device RAM. */
+        val heapMaxBytes: Long = memoryClassBytes,
+        /** Currently used Java/ART heap (`totalMemory - freeMemory`). */
+        val heapUsedBytes: Long = 0L,
+    ) {
+        val heapRemainingBytes: Long
+            get() = (heapMaxBytes - heapUsedBytes).coerceAtLeast(0L)
+    }
 
     data class Decision(
         val mode: FrameStorageMode,
@@ -123,6 +140,39 @@ object FrameStoragePolicy {
             )
         }
 
+        val heapStorageCap =
+            (memory.heapMaxBytes.toDouble() * MAX_HEAP_STORAGE_FRACTION).toLong()
+        if (memory.heapMaxBytes > 0L && storageBytes > heapStorageCap) {
+            return Decision(
+                mode = FrameStorageMode.DISK,
+                reason = "estimated ARGB storage ${storageBytes / (1024 * 1024)}MB " +
+                    "exceeds ${ (MAX_HEAP_STORAGE_FRACTION * 100).toInt() }% of " +
+                    "heapMax ${memory.heapMaxBytes / (1024 * 1024)}MB",
+                estimatedStorageBytes = storageBytes,
+                estimatedNeedBytes = needBytes,
+            )
+        }
+
+        if (needBytes > memory.memoryClassBytes && memory.memoryClassBytes > 0L) {
+            return Decision(
+                mode = FrameStorageMode.DISK,
+                reason = "need ${needBytes / (1024 * 1024)}MB exceeds memoryClass " +
+                    "${memory.memoryClassBytes / (1024 * 1024)}MB",
+                estimatedStorageBytes = storageBytes,
+                estimatedNeedBytes = needBytes,
+            )
+        }
+
+        if (memory.heapRemainingBytes < needBytes) {
+            return Decision(
+                mode = FrameStorageMode.DISK,
+                reason = "heap remaining ${memory.heapRemainingBytes / (1024 * 1024)}MB " +
+                    "< need ${needBytes / (1024 * 1024)}MB",
+                estimatedStorageBytes = storageBytes,
+                estimatedNeedBytes = needBytes,
+            )
+        }
+
         if (memory.availMemBytes < needBytes) {
             return Decision(
                 mode = FrameStorageMode.DISK,
@@ -135,8 +185,8 @@ object FrameStoragePolicy {
 
         return Decision(
             mode = FrameStorageMode.MEMORY,
-            reason = "within soft budget and availMem " +
-                "${memory.availMemBytes / (1024 * 1024)}MB >= need ${needBytes / (1024 * 1024)}MB",
+            reason = "within soft budget and heap remaining " +
+                "${memory.heapRemainingBytes / (1024 * 1024)}MB >= need ${needBytes / (1024 * 1024)}MB",
             estimatedStorageBytes = storageBytes,
             estimatedNeedBytes = needBytes,
         )

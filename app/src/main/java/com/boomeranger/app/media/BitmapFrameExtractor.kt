@@ -14,7 +14,8 @@ import kotlin.math.roundToInt
  * Uses MediaMetadataRetriever so rotation/display orientation is already applied to bitmaps.
  *
  * Storage is hybrid:
- * - [FrameStorageMode.MEMORY] keeps ARGB bitmaps in RAM (no JPEG round-trip)
+ * - [FrameStorageMode.MEMORY] copies retriever frames into app-owned ARGB bitmaps
+ *   (the original retriever bitmap is recycled immediately so extract cannot stall)
  * - [FrameStorageMode.DISK] writes JPEGs to avoid holding a full frame list in RAM
  *
  * If the memory path runs out of RAM mid-extract, callers should fall back to disk
@@ -111,8 +112,16 @@ class BitmapFrameExtractor {
                 if (bitmap != null) {
                     when (storageMode) {
                         FrameStorageMode.MEMORY -> {
-                            memoryFrames!!.add(bitmap)
-                            frames += FrameHandle.Memory(bitmap)
+                            // Copy then recycle the retriever bitmap. Keeping native frames
+                            // alive makes subsequent getFrameAtTime calls progressively
+                            // slower and can stall the extract loop entirely.
+                            val copy = try {
+                                copyRetrieverBitmap(bitmap)
+                            } finally {
+                                if (!bitmap.isRecycled) bitmap.recycle()
+                            }
+                            memoryFrames!!.add(copy)
+                            frames += FrameHandle.Memory(copy)
                         }
                         FrameStorageMode.DISK -> {
                             val file = File(outputDir, "frame_%05d.jpg".format(index))
@@ -197,6 +206,21 @@ class BitmapFrameExtractor {
                 error("Failed to compress frame to JPEG: ${file.name}")
             }
         }
+    }
+
+    /**
+     * Takes ownership of pixels from a [MediaMetadataRetriever] frame.
+     * Hardware configs are promoted to software ARGB so later [Bitmap.getPixels] works.
+     */
+    private fun copyRetrieverBitmap(source: Bitmap): Bitmap {
+        val destConfig = when (val config = source.config) {
+            Bitmap.Config.HARDWARE, null -> Bitmap.Config.ARGB_8888
+            else -> config
+        }
+        return source.copy(destConfig, false)
+            ?: throw OutOfMemoryError(
+                "Failed to copy retrieved frame ${source.width}x${source.height}."
+            )
     }
 
     private fun recycleBitmaps(bitmaps: MutableList<Bitmap>?) {
