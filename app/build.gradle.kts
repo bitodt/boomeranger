@@ -12,8 +12,9 @@ android {
         applicationId = "com.boomeranger.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // Bump on every sideloadable build so devices accept updates over older APKs.
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -21,8 +22,24 @@ android {
         }
     }
 
+    // Shared debug keystore so CI artifacts and local debug installs share one signing
+    // identity. Without this, each GitHub Actions runner generates a fresh debug
+    // keystore and Android rejects updates with INSTALL_FAILED_UPDATE_INCOMPATIBLE.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("keystore/boomeranger-debug.jks")
+            storePassword = "android"
+            keyAlias = "boomeranger-debug"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("debug")
+        }
         release {
+            // Sideloaded CI builds use debug; release stays explicit for future Play signing.
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

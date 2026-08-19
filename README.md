@@ -26,6 +26,8 @@ Command line:
 
 GitHub Actions (`.github/workflows/android-ci.yml`) runs unit tests, builds the debug APK on pushes/PRs, and uploads `boomeranger-debug-apk` as a workflow artifact (30-day retention).
 
+Debug APKs are signed with the repo-shared keystore `app/keystore/boomeranger-debug.jks` so you can update over a previous CI/local debug install without uninstalling. **One-time exception:** if an older APK was signed with a machine-local/CI-ephemeral debug key, uninstall that build once, then install this signed APK; later updates should install cleanly.
+
 ## How to use
 
 1. Tap **Choose video** and pick a local MP4 (or other Android-readable video).
