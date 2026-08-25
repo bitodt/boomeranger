@@ -43,7 +43,9 @@ com.boomeranger.app
 
 ### Gradle / manifest
 - `settings.gradle.kts`, `build.gradle.kts`, `gradle.properties`
-- `app/build.gradle.kts` — Compose, Media3 1.5.1, minSdk 26, compile/target 35
+- `app/build.gradle.kts` — Compose, Media3 1.5.1, minSdk 26, compile/target 35; versionName/versionCode from Gradle properties (GitHub Releases override from the tag)
+- `.github/workflows/android-ci.yml` — PR/push debug APK
+- `.github/workflows/release.yml` — GitHub Release → signed sideload APK asset
 - `app/src/main/AndroidManifest.xml` — single activity + FileProvider
 
 ### Models
@@ -115,6 +117,7 @@ SAF Uri
 | Concat / Media3 mime / HDR mode | `media/Media3TransformHelper.kt` |
 | Gallery path / share | `data/ExportRepository.kt` |
 | Stage labels / UX copy | `model/ExportStage.kt`, `ui/BoomerangAppScreen.kt` |
+| GitHub Release APK / versioning | `.github/workflows/release.yml`, `scripts/release-version.sh`, `gradle.properties` (`app.versionName` / `app.versionCode`) |
 
 ## Testing notes for agents
 
@@ -123,6 +126,7 @@ SAF Uri
 - Config-change test: rotate during export; ViewModel should keep progress.
 - Longer-than-3s input should show trim info and still export.
 - CI: `.github/workflows/android-ci.yml` builds the debug APK and uploads the `boomeranger-debug-apk` artifact.
+- Releases: publishing a GitHub Release tag `vMAJOR.MINOR.PATCH` runs `.github/workflows/release.yml`, which builds a signed sideload APK and attaches `Boomeranger-<version>.apk` to the release. Shared Android setup lives in `.github/actions/setup-android`. Tag → version mapping is `scripts/release-version.sh`.
 
 ## Non-goals / avoided approaches
 

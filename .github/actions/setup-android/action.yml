@@ -1,0 +1,23 @@
+name: Set up Android build
+description: JDK 17, Android SDK 35, and a runnable Gradle wrapper
+
+runs:
+  using: composite
+  steps:
+    - name: Set up JDK 17
+      uses: actions/setup-java@v5
+      with:
+        distribution: temurin
+        java-version: 17
+        cache: gradle
+
+    - name: Set up Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: Install Android SDK packages
+      shell: bash
+      run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+
+    - name: Grant execute permission for Gradlew
+      shell: bash
+      run: chmod +x gradlew
