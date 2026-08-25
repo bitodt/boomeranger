@@ -22,11 +22,15 @@ class AvailableMemoryReader(context: Context) {
         } else {
             activityManager.memoryClass
         }
+        val runtime = Runtime.getRuntime()
+        val heapUsed = (runtime.totalMemory() - runtime.freeMemory()).coerceAtLeast(0L)
         return FrameStoragePolicy.MemorySnapshot(
             availMemBytes = info.availMem,
             totalMemBytes = info.totalMem,
             lowMemory = info.lowMemory,
             memoryClassBytes = memoryClassMb.toLong() * 1024L * 1024L,
+            heapMaxBytes = runtime.maxMemory(),
+            heapUsedBytes = heapUsed,
         )
     }
 }
