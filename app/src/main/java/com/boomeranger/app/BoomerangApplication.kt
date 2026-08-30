@@ -6,6 +6,6 @@ import com.boomeranger.app.util.AppLogger
 class BoomerangApplication : Application() {
     override fun onCreate() {
         super.onCreate()
-        AppLogger.i("Boomeranger started")
+        AppLogger.i("Boomeranger started package=$packageName")
     }
 }

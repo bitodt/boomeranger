@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Boomeranger</string>
+    <string name="gallery_album">Boomeranger</string>
     <string name="pick_video">Choose video</string>
     <string name="pick_hint">Choose a video up to 3 seconds.</string>
     <string name="export">Export boomerang</string>

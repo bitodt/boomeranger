@@ -77,6 +77,9 @@ jobs:
             BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$APK")"
           fi
           echo "$BADGING" | head -n 5
+          PACKAGE="$(echo "$BADGING" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p")"
+          echo "package=$PACKAGE"
+          test "$PACKAGE" = "com.boomeranger.app"
           echo "$BADGING" | grep -q "versionCode='${{ steps.version.outputs.VERSION_CODE }}'"
           echo "$BADGING" | grep -q "versionName='${{ steps.version.outputs.VERSION_NAME }}'"
 

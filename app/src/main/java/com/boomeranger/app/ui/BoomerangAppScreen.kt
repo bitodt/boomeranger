@@ -64,6 +64,7 @@ import com.boomeranger.app.model.ResolutionOption
 import com.boomeranger.app.model.SpeedOption
 import com.boomeranger.app.model.VideoMetadata
 import com.boomeranger.app.ui.components.BoomerangDemoHero
+import com.boomeranger.app.ui.components.DevBuildBadge
 import com.boomeranger.app.ui.components.ClipWindowPicker
 import com.boomeranger.app.ui.components.GifPlayer
 import com.boomeranger.app.ui.components.SegmentedSelector
@@ -217,11 +218,17 @@ private fun HomeHeader(
                 Text("Back", color = Leaf)
             }
         }
-        Text(
-            text = "Boomeranger",
-            style = MaterialTheme.typography.displayLarge,
-            color = Mist,
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "Boomeranger",
+                style = MaterialTheme.typography.displayLarge,
+                color = Mist,
+            )
+            DevBuildBadge()
+        }
         if (showDemo) {
             BoomerangDemoHero()
         } else {

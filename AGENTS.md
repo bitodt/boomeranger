@@ -44,7 +44,7 @@ com.boomeranger.app
 ### Gradle / manifest
 - `settings.gradle.kts`, `build.gradle.kts`, `gradle.properties`
 - `app/build.gradle.kts` — Compose, Media3 1.5.1, minSdk 26, compile/target 35; versionName/versionCode from Gradle properties (GitHub Releases override from the tag)
-- `.github/workflows/android-ci.yml` — PR/push debug APK
+- `.github/workflows/android-ci.yml` — PR/push Dev APK (`com.boomeranger.app.debug`)
 - `.github/workflows/release.yml` — GitHub Release → signed sideload APK asset
 - `app/src/main/AndroidManifest.xml` — single activity + FileProvider
 
@@ -115,9 +115,10 @@ SAF Uri
 | Mute default | `model/ExportSettings.kt` |
 | Reverse quality (JPEG 95, fps) | `media/BitmapFrameExtractor.kt`, `FrameSequenceEncoder.kt` |
 | Concat / Media3 mime / HDR mode | `media/Media3TransformHelper.kt` |
-| Gallery path / share | `data/ExportRepository.kt` |
+| Gallery path / share | `data/ExportRepository.kt` + `gallery_album` string (debug overlay: `Boomeranger Dev`) |
 | Stage labels / UX copy | `model/ExportStage.kt`, `ui/BoomerangAppScreen.kt` |
 | GitHub Release APK / versioning | `.github/workflows/release.yml`, `scripts/release-version.sh`, `gradle.properties` (`app.versionName` / `app.versionCode`) |
+| Dev vs stable app IDs | `app/build.gradle.kts` (`applicationIdSuffix = ".debug"`), `src/debug/res/values/strings.xml` |
 
 ## Testing notes for agents
 
@@ -125,7 +126,7 @@ SAF Uri
 - Emulators may lack hardware encoders; software paths can be slow or fail.
 - Config-change test: rotate during export; ViewModel should keep progress.
 - Longer-than-3s input should show trim info and still export.
-- CI: `.github/workflows/android-ci.yml` builds the debug APK and uploads the `boomeranger-debug-apk` artifact.
+- CI: `.github/workflows/android-ci.yml` builds the Dev APK (`com.boomeranger.app.debug`) and uploads the `boomeranger-dev-apk` artifact. Release APKs stay `com.boomeranger.app`.
 - Releases: publishing a GitHub Release tag `vMAJOR.MINOR.PATCH` runs `.github/workflows/release.yml`, which builds a signed sideload APK and attaches `Boomeranger-<version>.apk` to the release. Shared Android setup lives in `.github/actions/setup-android`. Tag → version mapping is `scripts/release-version.sh`.
 
 ## Non-goals / avoided approaches
