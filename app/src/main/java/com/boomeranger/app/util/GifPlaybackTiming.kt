@@ -33,6 +33,8 @@ object GifPlaybackTiming {
     ): Plan {
         val fps = sourceFps.coerceIn(12f, 60f)
         val speed = speedMultiplier.coerceIn(1, 4)
+        // Hold ~30fps timing (3cs at 30fps). Faster speeds drop frames instead
+        // of shrinking delay — 1cs is ignored or treated as 10cs by many players.
         val delayCs = (100f / fps).toInt().coerceIn(MIN_DELAY_CS, MAX_DELAY_CS)
 
         var stride = speed

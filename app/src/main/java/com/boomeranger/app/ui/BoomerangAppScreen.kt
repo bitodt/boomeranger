@@ -117,6 +117,8 @@ fun BoomerangAppScreen(viewModel: BoomerangViewModel) {
                         resultUri = result.mediaStoreUri
                             ?: Uri.fromFile(result.outputFile),
                         format = result.format,
+                        durationMs = result.durationMs,
+                        speedLabel = state.settings.speed.label,
                         aspectRatio = if (result.height > 0) {
                             result.width.toFloat() / result.height.toFloat()
                         } else {
@@ -390,7 +392,8 @@ private fun ExportSettingsPanel(
             }
         } else {
             Text(
-                "GIF exports are silent, locked to 30 fps, and capped at 1080p so they encode faster.",
+                "GIF exports are silent, locked to 30 fps, and capped at 1080p. " +
+                    "2x / 4x keep every 2nd / 4th frame so the loop is actually faster.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Mist.copy(alpha = 0.65f),
             )
@@ -468,6 +471,8 @@ private fun ExportProgressPanel(
 private fun ResultPanel(
     resultUri: Uri,
     format: ExportFormat,
+    durationMs: Long,
+    speedLabel: String,
     aspectRatio: Float,
     onBack: () -> Unit,
     onShare: () -> Unit,
@@ -495,6 +500,18 @@ private fun ResultPanel(
         }
         TextButton(onClick = onBack) {
             Text("Create another boomerang", color = Leaf)
+        }
+        if (durationMs > 0L) {
+            Text(
+                text = String.format(
+                    Locale.US,
+                    "Length %.2fs · %s",
+                    durationMs / 1000.0,
+                    speedLabel,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = Mist.copy(alpha = 0.75f),
+            )
         }
         when (format) {
             ExportFormat.GIF -> GifPlayer(uri = resultUri, aspectRatio = aspectRatio)

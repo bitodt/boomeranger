@@ -205,8 +205,19 @@ class BoomerangExportUseCase(
                     try {
                         progressListener.onProgress(ExportStage.ENCODING_GIF, 0.60f)
                         ensureActive()
+                        // Subsample the source clip first, then build F/R. Dropping
+                        // after the cycle is easy to miss visually; this matches MP4
+                        // (same frames, 1/speed the duration) with a decoder-safe delay.
+                        val spedForward = GifPlaybackTiming.selectFrames(
+                            bundle.frames,
+                            speedMultiplier,
+                        )
+                        AppLogger.i(
+                            "GIF speed ${speedMultiplier}x: " +
+                                "${bundle.frames.size} forward -> ${spedForward.size} frames"
+                        )
                         val cycleFrames = reverseVideoBuilder.buildBoomerangFrameCycle(
-                            forwardFrames = bundle.frames,
+                            forwardFrames = spedForward,
                             repeatCount = settings.repeatCount.value,
                         )
                         gifEncoder.encode(
@@ -215,7 +226,8 @@ class BoomerangExportUseCase(
                             frameRate = bundle.frameRate,
                             width = bundle.width,
                             height = bundle.height,
-                            speedMultiplier = speedMultiplier,
+                            // Speed already applied to the frame list.
+                            speedMultiplier = 1,
                             onProgress = { p ->
                                 checkActive()
                                 progressListener.onProgress(
@@ -227,7 +239,7 @@ class BoomerangExportUseCase(
                         durationMs = GifPlaybackTiming.plan(
                             sourceFrameCount = cycleFrames.size,
                             sourceFps = bundle.frameRate,
-                            speedMultiplier = speedMultiplier,
+                            speedMultiplier = 1,
                         ).durationMs()
                     } finally {
                         bundle.release()

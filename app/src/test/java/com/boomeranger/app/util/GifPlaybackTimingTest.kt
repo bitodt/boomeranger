@@ -53,6 +53,17 @@ class GifPlaybackTimingTest {
     }
 
     @Test
+    fun fourXKeepsAboutOneQuarterOfAThreeSecondClip() {
+        val frames = (0 until 90).toList()
+        val sampled = GifPlaybackTiming.selectFrames(frames, 4)
+        assertEquals(23, sampled.size)
+        val oneX = GifPlaybackTiming.plan(90, 30f, 1)
+        val fourX = GifPlaybackTiming.plan(sampled.size, 30f, 1)
+        assertEquals(oneX.delayCs, fourX.delayCs)
+        assertTrue(fourX.durationMs() <= oneX.durationMs() / 3)
+    }
+
+    @Test
     fun selectFramesAppliesStrideAndKeepsEndsWhenNeeded() {
         val frames = (0 until 8).toList()
         assertEquals(frames, GifPlaybackTiming.selectFrames(frames, 1))
