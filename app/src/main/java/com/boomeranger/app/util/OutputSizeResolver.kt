@@ -13,14 +13,15 @@ import kotlin.math.roundToInt
  * FHD/HD caps are orientation-aware: portrait sources use a swapped bounding box
  * (e.g. HD → 720×1280) so vertical clips are not crushed into a landscape frame.
  *
- * GIF always applies an extra 1080p box after the user option so 4K sources
- * do not encode multi-megapixel GIF frames.
+ * GIF always applies an extra 720p box after the user option. 1080p loops
+ * make Android ImageDecoder / gallery paint a gray frame (they materialize
+ * every frame at full size).
  */
 object OutputSizeResolver {
 
-    /** 16:9 1080p. Portrait GIFs use the swapped box (1080×1920). */
-    const val GIF_MAX_LONG_EDGE: Int = 1920
-    const val GIF_MAX_SHORT_EDGE: Int = 1080
+    /** 16:9 720p. Portrait GIFs use the swapped box (720×1280). */
+    const val GIF_MAX_LONG_EDGE: Int = 1280
+    const val GIF_MAX_SHORT_EDGE: Int = 720
 
     fun resolve(
         sourceWidth: Int,

@@ -46,7 +46,10 @@ fun FrameHandle.openBitmap(targetWidth: Int, targetHeight: Int): OpenedFrame {
             }
         }
         is FrameHandle.Disk -> {
-            val decoded = BitmapFactory.decodeFile(file.absolutePath)
+            val options = BitmapFactory.Options().apply {
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+            val decoded = BitmapFactory.decodeFile(file.absolutePath, options)
                 ?: error("Failed to decode ${file.name}")
             if (decoded.width == targetWidth && decoded.height == targetHeight) {
                 OpenedFrame(decoded, ownsBitmap = true)

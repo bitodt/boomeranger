@@ -213,11 +213,8 @@ class BitmapFrameExtractor {
      * Hardware configs are promoted to software ARGB so later [Bitmap.getPixels] works.
      */
     private fun copyRetrieverBitmap(source: Bitmap): Bitmap {
-        val destConfig = when (val config = source.config) {
-            Bitmap.Config.HARDWARE, null -> Bitmap.Config.ARGB_8888
-            else -> config
-        }
-        return source.copy(destConfig, false)
+        // Always software ARGB so GIF getPixels / Canvas.draw never see HARDWARE/F16.
+        return source.copy(Bitmap.Config.ARGB_8888, false)
             ?: throw OutOfMemoryError(
                 "Failed to copy retrieved frame ${source.width}x${source.height}."
             )

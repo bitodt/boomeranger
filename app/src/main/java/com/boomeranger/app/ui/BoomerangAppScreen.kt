@@ -74,6 +74,7 @@ import com.boomeranger.app.ui.theme.Leaf
 import com.boomeranger.app.ui.theme.Mist
 import com.boomeranger.app.ui.theme.Moss
 import com.boomeranger.app.ui.theme.Sand
+import java.io.File
 import java.util.Locale
 
 @Composable
@@ -116,6 +117,7 @@ fun BoomerangAppScreen(viewModel: BoomerangViewModel) {
                     ResultPanel(
                         resultUri = result.mediaStoreUri
                             ?: Uri.fromFile(result.outputFile),
+                        resultFile = result.outputFile,
                         format = result.format,
                         durationMs = result.durationMs,
                         speedLabel = state.settings.speed.label,
@@ -392,8 +394,9 @@ private fun ExportSettingsPanel(
             }
         } else {
             Text(
-                "GIF exports are silent, locked to 30 fps, and capped at 1080p. " +
-                    "2x / 4x keep every 2nd / 4th frame so the loop is actually faster.",
+                "GIF exports are silent, locked to 30 fps, and capped at 720p so " +
+                    "Android can open them. 2x / 4x keep every 2nd / 4th frame so the " +
+                    "loop is actually faster.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Mist.copy(alpha = 0.65f),
             )
@@ -470,6 +473,7 @@ private fun ExportProgressPanel(
 @Composable
 private fun ResultPanel(
     resultUri: Uri,
+    resultFile: File,
     format: ExportFormat,
     durationMs: Long,
     speedLabel: String,
@@ -514,7 +518,11 @@ private fun ResultPanel(
             )
         }
         when (format) {
-            ExportFormat.GIF -> GifPlayer(uri = resultUri, aspectRatio = aspectRatio)
+            ExportFormat.GIF -> GifPlayer(
+                uri = resultUri,
+                file = resultFile,
+                aspectRatio = aspectRatio,
+            )
             ExportFormat.MP4 -> VideoPlayer(uri = resultUri, aspectRatio = aspectRatio)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
