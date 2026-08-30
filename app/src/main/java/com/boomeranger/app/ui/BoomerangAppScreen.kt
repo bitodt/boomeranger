@@ -386,7 +386,7 @@ private fun ExportSettingsPanel(
             }
         } else {
             Text(
-                "GIF exports are silent, locked to 30 fps, and capped at 480p so they encode faster.",
+                "GIF exports are silent, locked to 30 fps, and capped at 1080p so they encode faster.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Mist.copy(alpha = 0.65f),
             )

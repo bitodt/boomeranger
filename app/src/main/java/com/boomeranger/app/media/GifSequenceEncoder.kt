@@ -12,7 +12,7 @@ import kotlin.math.min
  * Encodes a frame sequence (in-memory bitmaps or JPEG files) into a looping GIF89a.
  *
  * Uses a per-frame popularity palette (256 colors) + LZW. Palette mapping is
- * O(unique 5-5-5 buckets); LZW uses integer keys. Combined with the 480p GIF
+ * O(unique 5-5-5 buckets); LZW uses integer keys. Combined with the 1080p GIF
  * cap this stays interactive for short boomerang clips.
  */
 class GifSequenceEncoder {

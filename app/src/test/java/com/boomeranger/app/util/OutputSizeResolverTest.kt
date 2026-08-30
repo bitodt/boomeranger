@@ -40,27 +40,39 @@ class OutputSizeResolverTest {
     }
 
     @Test
-    fun gifCapsOriginal1080pTo480p() {
+    fun gifKeeps1080pSource() {
         val size = OutputSizeResolver.resolve(
             sourceWidth = 1920,
             sourceHeight = 1080,
             option = ResolutionOption.ORIGINAL,
             format = ExportFormat.GIF,
         )
-        assertEquals(852, size.width)
-        assertEquals(480, size.height)
+        assertEquals(1920, size.width)
+        assertEquals(1080, size.height)
     }
 
     @Test
-    fun gifCapsPortraitTo480pBox() {
+    fun gifCaps4kLandscapeTo1080p() {
         val size = OutputSizeResolver.resolve(
-            sourceWidth = 1080,
-            sourceHeight = 1920,
+            sourceWidth = 3840,
+            sourceHeight = 2160,
             option = ResolutionOption.ORIGINAL,
             format = ExportFormat.GIF,
         )
-        assertEquals(480, size.width)
-        assertEquals(852, size.height)
+        assertEquals(1920, size.width)
+        assertEquals(1080, size.height)
+    }
+
+    @Test
+    fun gifCaps4kPortraitTo1080pBox() {
+        val size = OutputSizeResolver.resolve(
+            sourceWidth = 2160,
+            sourceHeight = 3840,
+            option = ResolutionOption.ORIGINAL,
+            format = ExportFormat.GIF,
+        )
+        assertEquals(1080, size.width)
+        assertEquals(1920, size.height)
     }
 
     @Test
@@ -76,15 +88,16 @@ class OutputSizeResolverTest {
     }
 
     @Test
-    fun gifSquareFitsInside480pBox() {
+    fun gifSquareFitsInside1080pBox() {
         val size = OutputSizeResolver.resolve(
-            sourceWidth = 1080,
-            sourceHeight = 1080,
+            sourceWidth = 2160,
+            sourceHeight = 2160,
             option = ResolutionOption.ORIGINAL,
             format = ExportFormat.GIF,
         )
-        assertEquals(480, size.width)
-        assertEquals(480, size.height)
+        assertEquals(1080, size.width)
+        assertEquals(1080, size.height)
         assertTrue(size.width <= OutputSizeResolver.GIF_MAX_SHORT_EDGE)
+        assertTrue(size.height <= OutputSizeResolver.GIF_MAX_LONG_EDGE)
     }
 }
