@@ -3,6 +3,7 @@ package com.boomeranger.app.media
 import android.graphics.Bitmap
 import android.graphics.Color
 import com.boomeranger.app.util.AppLogger
+import com.boomeranger.app.util.GifPlaybackTiming
 import java.io.File
 import java.io.OutputStream
 import kotlin.math.min
@@ -28,25 +29,27 @@ class GifSequenceEncoder {
         outputFile.parentFile?.mkdirs()
         if (outputFile.exists()) outputFile.delete()
 
-        val fps = frameRate.coerceIn(12f, 60f)
-        val speed = speedMultiplier.coerceIn(1, 4)
-        val playbackFps = (fps * speed).coerceIn(12f, 240f)
-        // GIF delay unit is 1/100s.
-        val delayCs = (100f / playbackFps).toInt().coerceIn(1, 20)
+        val timing = GifPlaybackTiming.plan(
+            sourceFrameCount = frames.size,
+            sourceFps = frameRate,
+            speedMultiplier = speedMultiplier,
+        )
+        val outputFrames = GifPlaybackTiming.selectFrames(frames, timing.frameStride)
+        require(outputFrames.size >= 2) { "GIF needs at least 2 frames after speed sampling." }
 
         outputFile.outputStream().use { out ->
             writeString(out, "GIF89a")
             writeLogicalScreen(out, width, height)
             writeNetscapeLoop(out)
 
-            frames.forEachIndexed { index, frame ->
+            outputFrames.forEachIndexed { index, frame ->
                 val opened = frame.openBitmap(width, height)
                 try {
-                    writeFrame(out, opened.bitmap, delayCs)
+                    writeFrame(out, opened.bitmap, timing.delayCs)
                 } finally {
                     opened.recycleIfOwned()
                 }
-                onProgress((index + 1).toFloat() / frames.size)
+                onProgress((index + 1).toFloat() / outputFrames.size)
             }
 
             out.write(0x3B) // trailer
@@ -54,8 +57,9 @@ class GifSequenceEncoder {
         }
 
         AppLogger.i(
-            "Encoded GIF ${outputFile.name}: ${frames.size} frames " +
-                "@ ${playbackFps}fps (${speed}x), ${outputFile.length()} bytes"
+            "Encoded GIF ${outputFile.name}: ${outputFrames.size} frames " +
+                "(stride=${timing.frameStride}, ${speedMultiplier.coerceIn(1, 4)}x) " +
+                "delay=${timing.delayCs}cs, ${outputFile.length()} bytes"
         )
     }
 

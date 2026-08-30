@@ -18,6 +18,7 @@ import com.boomeranger.app.model.VideoMetadata
 import com.boomeranger.app.util.AppLogger
 import com.boomeranger.app.util.AvailableMemoryReader
 import com.boomeranger.app.util.ClipWindowResolver
+import com.boomeranger.app.util.GifPlaybackTiming
 import com.boomeranger.app.util.OutputSizeResolver
 import com.boomeranger.app.util.UriFileCopier
 import kotlinx.coroutines.Dispatchers
@@ -213,9 +214,11 @@ class BoomerangExportUseCase(
                                 )
                             },
                         )
-                        val playbackFps = bundle.frameRate * speedMultiplier
-                        val frameDelayMs = (1000f / playbackFps).toLong().coerceAtLeast(1L)
-                        durationMs = cycleFrames.size * frameDelayMs
+                        durationMs = GifPlaybackTiming.plan(
+                            sourceFrameCount = cycleFrames.size,
+                            sourceFps = bundle.frameRate,
+                            speedMultiplier = speedMultiplier,
+                        ).durationMs()
                     } finally {
                         bundle.release()
                     }
