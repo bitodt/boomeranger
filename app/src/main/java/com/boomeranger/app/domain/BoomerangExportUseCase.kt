@@ -23,6 +23,7 @@ import com.boomeranger.app.util.OutputSizeResolver
 import com.boomeranger.app.util.UriFileCopier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
@@ -59,6 +60,10 @@ class BoomerangExportUseCase(
             appContext.cacheDir,
             "export_${System.currentTimeMillis()}"
         ).also { it.mkdirs() }
+        val exportJob = coroutineContext.job
+        var outputFile: File? = null
+
+        fun checkActive() = exportJob.ensureActive()
 
         try {
             progressListener.onProgress(ExportStage.READING_METADATA, 0.02f)
@@ -117,6 +122,7 @@ class BoomerangExportUseCase(
                 appContext.getExternalFilesDir(null) ?: appContext.filesDir,
                 "boomerangs/${outputFileName(settings.format)}"
             )
+            outputFile = finalFile
 
             val durationMs: Long
             val outWidth: Int
@@ -141,6 +147,7 @@ class BoomerangExportUseCase(
                         outputHeight = outputSize.height,
                         clipDurationMs = clipDurationMs,
                         onProgress = { p ->
+                            checkActive()
                             progressListener.onProgress(
                                 ExportStage.GENERATING_REVERSE,
                                 0.28f + p * 0.32f
@@ -185,6 +192,7 @@ class BoomerangExportUseCase(
                         outputHeight = outputSize.height,
                         clipDurationMs = clipDurationMs,
                         onProgress = { p ->
+                            checkActive()
                             progressListener.onProgress(
                                 ExportStage.GENERATING_REVERSE,
                                 0.28f + p * 0.30f
@@ -209,6 +217,7 @@ class BoomerangExportUseCase(
                             height = bundle.height,
                             speedMultiplier = speedMultiplier,
                             onProgress = { p ->
+                                checkActive()
                                 progressListener.onProgress(
                                     ExportStage.ENCODING_GIF,
                                     0.60f + p * 0.30f
@@ -243,6 +252,10 @@ class BoomerangExportUseCase(
             val result = provisional.copy(mediaStoreUri = galleryUri)
             progressListener.onProgress(ExportStage.COMPLETED, 1f)
             result
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            AppLogger.i("Boomerang export cancelled")
+            outputFile?.delete()
+            throw cancelled
         } catch (t: Throwable) {
             AppLogger.e("Boomerang export failed", t)
             progressListener.onProgress(ExportStage.FAILED, 0f)

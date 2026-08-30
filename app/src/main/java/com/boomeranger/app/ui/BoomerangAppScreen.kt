@@ -84,8 +84,8 @@ fun BoomerangAppScreen(viewModel: BoomerangViewModel) {
     val canNavigateHome =
         !state.isExporting && (showingResult || state.selectedVideo != null)
 
-    BackHandler(enabled = canNavigateHome) {
-        viewModel.goHome()
+    BackHandler(enabled = state.isExporting || canNavigateHome) {
+        if (state.isExporting) viewModel.cancelExport() else viewModel.goHome()
     }
 
     val picker = rememberLauncherForActivityResult(
@@ -182,7 +182,11 @@ fun BoomerangAppScreen(viewModel: BoomerangViewModel) {
                 }
 
                 if (state.isExporting || state.stage == ExportStage.FAILED) {
-                    ExportProgressPanel(state = state, onRetry = viewModel::retryExport)
+                    ExportProgressPanel(
+                        state = state,
+                        onRetry = viewModel::retryExport,
+                        onCancel = viewModel::cancelExport,
+                    )
                 }
             }
 
@@ -403,7 +407,11 @@ private fun ExportSettingsPanel(
 }
 
 @Composable
-private fun ExportProgressPanel(state: BoomerangUiState, onRetry: () -> Unit) {
+private fun ExportProgressPanel(
+    state: BoomerangUiState,
+    onRetry: () -> Unit,
+    onCancel: () -> Unit,
+) {
     val animatedProgress by animateFloatAsState(
         targetValue = state.progress,
         animationSpec = tween(300),
@@ -439,6 +447,16 @@ private fun ExportProgressPanel(state: BoomerangUiState, onRetry: () -> Unit) {
                     style = MaterialTheme.typography.labelLarge,
                     color = Mist,
                 )
+            }
+            Button(
+                onClick = onCancel,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Danger,
+                    contentColor = Mist,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Cancel export")
             }
         } else if (state.stage == ExportStage.FAILED) {
             TextButton(onClick = onRetry) { Text("Retry", color = Leaf) }

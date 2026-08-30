@@ -44,6 +44,7 @@ class GifSequenceEncoder {
             writeNetscapeLoop(out)
 
             outputFrames.forEachIndexed { index, frame ->
+                onProgress(index.toFloat() / outputFrames.size)
                 val opened = frame.openBitmap(width, height)
                 try {
                     writeFrame(out, opened.bitmap, timing.delayCs)

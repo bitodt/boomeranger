@@ -148,23 +148,27 @@ class BoomerangViewModel(
                 it.copy(
                     isExporting = true,
                     errorMessage = null,
+                    infoMessage = null,
                     result = null,
                     stage = ExportStage.READING_METADATA,
                     progress = 0f,
                 )
             }
-            runCatching {
-                exportUseCase.export(
+            try {
+                val result = exportUseCase.export(
                     metadata = metadata,
                     settings = _uiState.value.settings,
                     trimStartMs = _uiState.value.trimStartMs,
                     progressListener = { stage, progress ->
-                        _uiState.update {
-                            it.copy(stage = stage, progress = progress.coerceIn(0f, 1f))
+                        _uiState.update { current ->
+                            if (!current.isExporting) current
+                            else current.copy(
+                                stage = stage,
+                                progress = progress.coerceIn(0f, 1f),
+                            )
                         }
                     },
                 )
-            }.onSuccess { result ->
                 _uiState.update {
                     it.copy(
                         isExporting = false,
@@ -173,8 +177,10 @@ class BoomerangViewModel(
                         progress = 1f,
                     )
                 }
-            }.onFailure { error ->
-                if (error is kotlinx.coroutines.CancellationException) throw error
+            } catch (_: kotlinx.coroutines.CancellationException) {
+                AppLogger.i("Export cancelled")
+                markExportCancelled()
+            } catch (error: Throwable) {
                 AppLogger.e("Export UI failure", error)
                 _uiState.update {
                     it.copy(
@@ -184,6 +190,26 @@ class BoomerangViewModel(
                     )
                 }
             }
+        }
+    }
+
+    fun cancelExport() {
+        if (!_uiState.value.isExporting) return
+        AppLogger.i("Cancel export requested")
+        markExportCancelled()
+        exportJob?.cancel()
+        exportJob = null
+    }
+
+    private fun markExportCancelled() {
+        _uiState.update {
+            it.copy(
+                isExporting = false,
+                stage = ExportStage.IDLE,
+                progress = 0f,
+                infoMessage = "Export cancelled.",
+                errorMessage = null,
+            )
         }
     }
 
