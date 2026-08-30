@@ -46,11 +46,13 @@ android {
 
     buildTypes {
         debug {
+            applicationIdSuffix = ".debug"
             signingConfig = signingConfigs.getByName("debug")
         }
         release {
-            // Sideload GitHub Releases use the same cert as debug so users can
-            // update over a previous CI/local install. Not for Play Store.
+            // Sideload GitHub Releases. Same cert as debug so Dev and stable
+            // builds are both installable from CI; they stay separate apps
+            // because debug uses applicationIdSuffix. Not for Play Store.
             signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             proguardFiles(

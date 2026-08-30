@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -37,6 +38,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.boomeranger.app.ui.components.DevBuildBadge
 import com.boomeranger.app.ui.theme.Ink
 import com.boomeranger.app.ui.theme.Leaf
 import com.boomeranger.app.ui.theme.Mist
@@ -148,12 +150,18 @@ fun BoomerangerSplash(
                     .alpha(markAlpha.value),
             )
             Spacer(modifier = Modifier.height(28.dp))
-            Text(
-                text = "Boomeranger",
-                style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.Bold),
-                color = Mist,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.alpha(titleAlpha.value),
-            )
+            ) {
+                Text(
+                    text = "Boomeranger",
+                    style = MaterialTheme.typography.displayLarge.copy(fontWeight = FontWeight.Bold),
+                    color = Mist,
+                )
+                DevBuildBadge()
+            }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "Forward. Back. Again.",

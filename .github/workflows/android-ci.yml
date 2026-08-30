@@ -37,13 +37,23 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew :app:assembleDebug --stacktrace
 
-      - name: Verify stable debug signing cert
+      - name: Verify debug APK signing and package
         run: |
-          CERT="$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs \
-            app/build/outputs/apk/debug/app-debug.apk)"
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          CERT="$("$BUILD_TOOLS/apksigner" verify --print-certs "$APK")"
           echo "$CERT"
           echo "$CERT" | grep -qi 'CN=Boomeranger Debug'
           echo "$CERT" | grep -qi 'ace59ad6d965e339fb7f290b3e931e6d71f35835d434f5893414f3e15cd16739'
+          if [[ -x "$BUILD_TOOLS/aapt" ]]; then
+            BADGING="$("$BUILD_TOOLS/aapt" dump badging "$APK")"
+          else
+            BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$APK")"
+          fi
+          echo "$BADGING" | head -n 5
+          PACKAGE="$(echo "$BADGING" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p")"
+          echo "package=$PACKAGE"
+          test "$PACKAGE" = "com.boomeranger.app.debug"
 
       - name: Assemble release APK smoke
         run: |
@@ -63,13 +73,16 @@ jobs:
             BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$APK")"
           fi
           echo "$BADGING" | head -n 5
+          PACKAGE="$(echo "$BADGING" | sed -n "s/^package: name='\\([^']*\\)'.*/\\1/p")"
+          echo "package=$PACKAGE"
+          test "$PACKAGE" = "com.boomeranger.app"
           echo "$BADGING" | grep -q "versionCode='1000000'"
           echo "$BADGING" | grep -q "versionName='1.0.0'"
 
-      - name: Upload debug APK artifact
+      - name: Upload Dev APK artifact
         uses: actions/upload-artifact@v7
         with:
-          name: boomeranger-debug-apk
+          name: boomeranger-dev-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30

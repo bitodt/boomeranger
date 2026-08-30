@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
+import com.boomeranger.app.R
 import com.boomeranger.app.model.ExportFormat
 import com.boomeranger.app.model.ExportResult
 import com.boomeranger.app.util.AppLogger
@@ -48,7 +49,7 @@ class ExportRepository(private val context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(
                     MediaStore.Video.Media.RELATIVE_PATH,
-                    Environment.DIRECTORY_MOVIES + "/Boomeranger"
+                    Environment.DIRECTORY_MOVIES + "/" + galleryAlbum()
                 )
                 put(MediaStore.Video.Media.IS_PENDING, 1)
             }
@@ -74,7 +75,7 @@ class ExportRepository(private val context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(
                     MediaStore.Images.Media.RELATIVE_PATH,
-                    Environment.DIRECTORY_PICTURES + "/Boomeranger"
+                    Environment.DIRECTORY_PICTURES + "/" + galleryAlbum()
                 )
                 put(MediaStore.Images.Media.IS_PENDING, 1)
             }
@@ -114,6 +115,8 @@ class ExportRepository(private val context: Context) {
             throw t
         }
     }
+
+    private fun galleryAlbum(): String = context.getString(R.string.gallery_album)
 
     fun buildShareIntent(file: File, mimeType: String = "video/mp4"): Intent {
         val uri = FileProvider.getUriForFile(

@@ -24,9 +24,16 @@ Command line:
 
 ## CI
 
-GitHub Actions (`.github/workflows/android-ci.yml`) runs unit tests, builds the debug APK on pushes/PRs, and uploads `boomeranger-debug-apk` as a workflow artifact (30-day retention).
+GitHub Actions (`.github/workflows/android-ci.yml`) runs unit tests, builds the **Dev** debug APK on pushes/PRs, and uploads `boomeranger-dev-apk` as a workflow artifact (30-day retention).
 
-Debug APKs are signed with the repo-shared keystore `app/keystore/boomeranger-debug.jks` so you can update over a previous CI/local debug install without uninstalling. **One-time exception:** if an older APK was signed with a machine-local/CI-ephemeral debug key, uninstall that build once, then install this signed APK; later updates should install cleanly.
+Dev and GitHub Release APKs are **separate Android apps** so they can sit on a device together and update independently:
+
+| Build | `applicationId` | Launcher name | Updates |
+|-------|-----------------|---------------|---------|
+| Debug / CI / local (`assembleDebug`) | `com.boomeranger.app.debug` | Boomeranger Dev | Only other Dev APKs |
+| GitHub Release (`assembleRelease`) | `com.boomeranger.app` | Boomeranger | Only other Release APKs |
+
+Both still use the shared sideload keystore `app/keystore/boomeranger-debug.jks` (FileProvider authorities follow the package name). **One-time exception:** if an older APK was signed with a machine-local/CI-ephemeral debug key, uninstall that build once. After this split, an old CI APK that used `com.boomeranger.app` is treated as the stable app; the next Dev APK appears as a second icon.
 
 ## GitHub Releases
 
@@ -44,7 +51,7 @@ The tag is the version source of truth:
 | `v1.0.2` | `1.0.2` | `1000002` (`major * 1_000_000 + minor * 1_000 + patch`) |
 | `v1.1.0-rc.1` | `1.1.0-rc.1` | `1001000` (numeric triple only) |
 
-Release APKs use the same sideload signing cert as debug CI builds, so devices can update over an existing Boomeranger install. Do **not** use these APKs for Play Store publishing.
+Release APKs keep `com.boomeranger.app` so they update the stable install (including the 0.1.0 beta). They do **not** replace Boomeranger Dev. Do **not** use these APKs for Play Store publishing.
 
 To rebuild an APK for an existing tag, run **Actions → Release APK → Run workflow** and enter that tag.
 
