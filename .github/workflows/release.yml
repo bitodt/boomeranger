@@ -1,0 +1,114 @@
+name: Release APK
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing GitHub release tag to rebuild (e.g. v1.0.2)
+        required: true
+        type: string
+
+concurrency:
+  group: release-apk-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and attach APK
+    runs-on: ubuntu-latest
+
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Resolve version from tag
+        id: version
+        run: |
+          eval "$(bash scripts/release-version.sh "$RELEASE_TAG")"
+          echo "VERSION_NAME=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "VERSION_CODE=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "Resolved $RELEASE_TAG → versionName=$VERSION_NAME versionCode=$VERSION_CODE"
+
+      - name: Set up Android build
+        uses: ./.github/actions/setup-android
+
+      - name: Run unit tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+      - name: Assemble release APK
+        run: >
+          ./gradlew :app:assembleRelease --stacktrace
+          -PversionName=${{ steps.version.outputs.VERSION_NAME }}
+          -PversionCode=${{ steps.version.outputs.VERSION_CODE }}
+
+      - name: Package APK and checksum
+        id: package
+        run: |
+          SRC="app/build/outputs/apk/release/app-release.apk"
+          DEST="Boomeranger-${{ steps.version.outputs.VERSION_NAME }}.apk"
+          test -f "$SRC"
+          cp "$SRC" "$DEST"
+          sha256sum "$DEST" | tee "$DEST.sha256"
+          echo "apk=$DEST" >> "$GITHUB_OUTPUT"
+          echo "checksum=$DEST.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Verify APK signing and version
+        run: |
+          APK="${{ steps.package.outputs.apk }}"
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          CERT="$("$BUILD_TOOLS/apksigner" verify --print-certs "$APK")"
+          echo "$CERT"
+          echo "$CERT" | grep -qi 'CN=Boomeranger Debug'
+          echo "$CERT" | grep -qi 'ace59ad6d965e339fb7f290b3e931e6d71f35835d434f5893414f3e15cd16739'
+
+          if [[ -x "$BUILD_TOOLS/aapt" ]]; then
+            BADGING="$("$BUILD_TOOLS/aapt" dump badging "$APK")"
+          else
+            BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$APK")"
+          fi
+          echo "$BADGING" | head -n 5
+          echo "$BADGING" | grep -q "versionCode='${{ steps.version.outputs.VERSION_CODE }}'"
+          echo "$BADGING" | grep -q "versionName='${{ steps.version.outputs.VERSION_NAME }}'"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: boomeranger-${{ steps.version.outputs.VERSION_NAME }}-apk
+          path: |
+            ${{ steps.package.outputs.apk }}
+            ${{ steps.package.outputs.checksum }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Attach APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$RELEASE_TAG"
+          gh release upload "$RELEASE_TAG" \
+            "${{ steps.package.outputs.apk }}" \
+            "${{ steps.package.outputs.checksum }}" \
+            --clobber
+
+      - name: Write job summary
+        run: |
+          {
+            echo "## Release APK"
+            echo
+            echo "- Tag: \`$RELEASE_TAG\`"
+            echo "- versionName: \`${{ steps.version.outputs.VERSION_NAME }}\`"
+            echo "- versionCode: \`${{ steps.version.outputs.VERSION_CODE }}\`"
+            echo "- Asset: \`${{ steps.package.outputs.apk }}\`"
+            echo
+            echo "Download the APK from the GitHub Release assets."
+          } >> "$GITHUB_STEP_SUMMARY"

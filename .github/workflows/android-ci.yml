@@ -13,31 +13,23 @@ concurrency:
   group: android-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build:
-    name: Build debug APK
+    name: Build APKs
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 17
-          cache: gradle
+      - name: Set up Android build
+        uses: ./.github/actions/setup-android
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK packages
-        run: |
-          sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
-
-      - name: Grant execute permission for Gradlew
-        run: chmod +x gradlew
+      - name: Check release tag parser
+        run: bash scripts/release-version.sh --self-test
 
       - name: Run unit tests
         run: ./gradlew :app:testDebugUnitTest --stacktrace
@@ -52,6 +44,27 @@ jobs:
           echo "$CERT"
           echo "$CERT" | grep -qi 'CN=Boomeranger Debug'
           echo "$CERT" | grep -qi 'ace59ad6d965e339fb7f290b3e931e6d71f35835d434f5893414f3e15cd16739'
+
+      - name: Assemble release APK smoke
+        run: |
+          eval "$(bash scripts/release-version.sh v1.0.0)"
+          ./gradlew :app:assembleRelease --stacktrace \
+            -PversionName="$VERSION_NAME" \
+            -PversionCode="$VERSION_CODE"
+          APK=app/build/outputs/apk/release/app-release.apk
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          CERT="$("$BUILD_TOOLS/apksigner" verify --print-certs "$APK")"
+          echo "$CERT"
+          echo "$CERT" | grep -qi 'CN=Boomeranger Debug'
+          echo "$CERT" | grep -qi 'ace59ad6d965e339fb7f290b3e931e6d71f35835d434f5893414f3e15cd16739'
+          if [[ -x "$BUILD_TOOLS/aapt" ]]; then
+            BADGING="$("$BUILD_TOOLS/aapt" dump badging "$APK")"
+          else
+            BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$APK")"
+          fi
+          echo "$BADGING" | head -n 5
+          echo "$BADGING" | grep -q "versionCode='1000000'"
+          echo "$BADGING" | grep -q "versionName='1.0.0'"
 
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v7

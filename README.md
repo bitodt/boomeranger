@@ -28,6 +28,26 @@ GitHub Actions (`.github/workflows/android-ci.yml`) runs unit tests, builds the 
 
 Debug APKs are signed with the repo-shared keystore `app/keystore/boomeranger-debug.jks` so you can update over a previous CI/local debug install without uninstalling. **One-time exception:** if an older APK was signed with a machine-local/CI-ephemeral debug key, uninstall that build once, then install this signed APK; later updates should install cleanly.
 
+## GitHub Releases
+
+Publishing a GitHub Release builds a sideloadable APK and attaches it to that release.
+
+1. On GitHub, open **Releases → Draft a new release**.
+2. Create a tag named `vMAJOR.MINOR.PATCH` (for example `v1.0.2`) targeting `main`. Optional prerelease suffixes are allowed (`v1.1.0-rc.1`).
+3. Add notes and click **Publish release** (or **Save draft** then publish later — the APK build starts when the release is published).
+4. The **Release APK** workflow tests, builds `assembleRelease`, and uploads `Boomeranger-<version>.apk` plus a `.sha256` checksum as release assets.
+
+The tag is the version source of truth:
+
+| Tag | versionName | versionCode |
+|-----|-------------|-------------|
+| `v1.0.2` | `1.0.2` | `1000002` (`major * 1_000_000 + minor * 1_000 + patch`) |
+| `v1.1.0-rc.1` | `1.1.0-rc.1` | `1001000` (numeric triple only) |
+
+Release APKs use the same sideload signing cert as debug CI builds, so devices can update over an existing Boomeranger install. Do **not** use these APKs for Play Store publishing.
+
+To rebuild an APK for an existing tag, run **Actions → Release APK → Run workflow** and enter that tag.
+
 ## How to use
 
 1. Tap **Choose video** and pick a local MP4 (or other Android-readable video).

@@ -4,6 +4,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val resolvedVersionName = providers.gradleProperty("versionName")
+    .orElse(providers.gradleProperty("app.versionName"))
+    .get()
+val resolvedVersionCode = providers.gradleProperty("versionCode")
+    .orElse(providers.gradleProperty("app.versionCode"))
+    .get()
+    .toInt()
+
 android {
     namespace = "com.boomeranger.app"
     compileSdk = 35
@@ -12,9 +20,10 @@ android {
         applicationId = "com.boomeranger.app"
         minSdk = 26
         targetSdk = 35
-        // Bump on every sideloadable build so devices accept updates over older APKs.
-        versionCode = 2
-        versionName = "1.0.1"
+        // GitHub Releases pass -PversionName / -PversionCode from the tag.
+        // Local and PR CI builds use app.versionName / app.versionCode in gradle.properties.
+        versionCode = resolvedVersionCode
+        versionName = resolvedVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -22,9 +31,10 @@ android {
         }
     }
 
-    // Shared debug keystore so CI artifacts and local debug installs share one signing
-    // identity. Without this, each GitHub Actions runner generates a fresh debug
-    // keystore and Android rejects updates with INSTALL_FAILED_UPDATE_INCOMPATIBLE.
+    // Shared debug keystore so CI artifacts, local installs, and GitHub Release
+    // APKs share one signing identity. Without this, each GitHub Actions runner
+    // generates a fresh debug keystore and Android rejects updates with
+    // INSTALL_FAILED_UPDATE_INCOMPATIBLE.
     signingConfigs {
         getByName("debug") {
             storeFile = file("keystore/boomeranger-debug.jks")
@@ -39,7 +49,9 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
         release {
-            // Sideloaded CI builds use debug; release stays explicit for future Play signing.
+            // Sideload GitHub Releases use the same cert as debug so users can
+            // update over a previous CI/local install. Not for Play Store.
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
