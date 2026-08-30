@@ -1,5 +1,6 @@
 package com.boomeranger.app.util
 
+import com.boomeranger.app.model.ExportFormat
 import com.boomeranger.app.model.ResolutionOption
 import com.boomeranger.app.model.VideoSize
 import kotlin.math.min
@@ -11,46 +12,79 @@ import kotlin.math.roundToInt
  *
  * FHD/HD caps are orientation-aware: portrait sources use a swapped bounding box
  * (e.g. HD → 720×1280) so vertical clips are not crushed into a landscape frame.
+ *
+ * GIF always applies an extra 480p box after the user option. Full-resolution GIF
+ * encode is too slow (palette + LZW scale with pixel count) and produces huge files.
  */
 object OutputSizeResolver {
+
+    /** 16:9 480p. Portrait GIFs use the swapped box (480×854). */
+    const val GIF_MAX_LONG_EDGE: Int = 854
+    const val GIF_MAX_SHORT_EDGE: Int = 480
 
     fun resolve(
         sourceWidth: Int,
         sourceHeight: Int,
         option: ResolutionOption,
+        format: ExportFormat = ExportFormat.MP4,
     ): VideoSize {
         require(sourceWidth > 0 && sourceHeight > 0) {
             "Invalid source size: ${sourceWidth}x$sourceHeight"
         }
 
-        if (option == ResolutionOption.ORIGINAL) {
-            return evenSize(sourceWidth, sourceHeight)
+        val selected = if (option == ResolutionOption.ORIGINAL) {
+            evenSize(sourceWidth, sourceHeight)
+        } else {
+            fitToCap(sourceWidth, sourceHeight, optionCap(option, sourceWidth, sourceHeight))
         }
 
-        val landscapeCap = when (option) {
+        if (format != ExportFormat.GIF) return selected
+        return fitToCap(
+            selected.width,
+            selected.height,
+            gifCap(selected.width, selected.height),
+        )
+    }
+
+    private fun optionCap(
+        option: ResolutionOption,
+        sourceWidth: Int,
+        sourceHeight: Int,
+    ): Pair<Int, Int> {
+        val landscape = when (option) {
             ResolutionOption.FHD -> 1920 to 1080
             ResolutionOption.HD -> 1280 to 720
             ResolutionOption.ORIGINAL -> error("unreachable")
         }
+        return orientedCap(landscape, sourceWidth, sourceHeight)
+    }
 
-        val isPortrait = sourceHeight > sourceWidth
-        val (maxWidth, maxHeight) = if (isPortrait) {
-            landscapeCap.second to landscapeCap.first
+    private fun gifCap(width: Int, height: Int): Pair<Int, Int> {
+        return orientedCap(GIF_MAX_LONG_EDGE to GIF_MAX_SHORT_EDGE, width, height)
+    }
+
+    private fun orientedCap(
+        landscape: Pair<Int, Int>,
+        width: Int,
+        height: Int,
+    ): Pair<Int, Int> {
+        return if (height > width) {
+            landscape.second to landscape.first
         } else {
-            landscapeCap
+            landscape
         }
+    }
 
-        val exceeds = sourceWidth > maxWidth || sourceHeight > maxHeight
-        if (!exceeds) {
-            return evenSize(sourceWidth, sourceHeight)
+    private fun fitToCap(width: Int, height: Int, cap: Pair<Int, Int>): VideoSize {
+        val (maxWidth, maxHeight) = cap
+        if (width <= maxWidth && height <= maxHeight) {
+            return evenSize(width, height)
         }
-
-        val widthScale = maxWidth.toFloat() / sourceWidth
-        val heightScale = maxHeight.toFloat() / sourceHeight
-        val scale = min(widthScale, heightScale)
-        val width = (sourceWidth * scale).roundToInt()
-        val height = (sourceHeight * scale).roundToInt()
-        return evenSize(width, height)
+        val scale = min(maxWidth.toFloat() / width, maxHeight.toFloat() / height)
+        return evenSize(
+            (width * scale).roundToInt(),
+            (height * scale).roundToInt(),
+        )
     }
 
     /** Many encoders require even dimensions for YUV420. */

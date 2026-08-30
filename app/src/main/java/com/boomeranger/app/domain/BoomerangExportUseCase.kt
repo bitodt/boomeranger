@@ -73,6 +73,7 @@ class BoomerangExportUseCase(
                 sourceWidth = metadata.orientedWidth,
                 sourceHeight = metadata.orientedHeight,
                 option = settings.resolution,
+                format = settings.format,
             )
             val targetFps = when (settings.format) {
                 ExportFormat.GIF -> 30f

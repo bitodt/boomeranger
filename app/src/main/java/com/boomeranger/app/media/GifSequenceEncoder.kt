@@ -11,8 +11,9 @@ import kotlin.math.min
 /**
  * Encodes a frame sequence (in-memory bitmaps or JPEG files) into a looping GIF89a.
  *
- * Uses a per-frame popularity palette (256 colors) + LZW. Suitable for short
- * boomerang clips; large resolution × high fps exports can produce big files.
+ * Uses a per-frame popularity palette (256 colors) + LZW. Palette mapping is
+ * O(unique 5-5-5 buckets); LZW uses integer keys. Combined with the 480p GIF
+ * cap this stays interactive for short boomerang clips.
  */
 class GifSequenceEncoder {
 
@@ -89,11 +90,7 @@ class GifSequenceEncoder {
         val pixels = IntArray(width * height)
         bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
 
-        val palette = buildPalette(pixels, maxColors = 256)
-        val indexed = ByteArray(pixels.size)
-        for (i in pixels.indices) {
-            indexed[i] = nearestIndex(pixels[i], palette).toByte()
-        }
+        val (palette, indexed) = quantize(pixels, maxColors = 256)
 
         // Graphics Control Extension
         out.write(0x21)
@@ -134,40 +131,60 @@ class GifSequenceEncoder {
         writeLzw(out, indexed, minCodeSize)
     }
 
-    private fun buildPalette(pixels: IntArray, maxColors: Int): IntArray {
-        // Popularity quantizer on 5-5-5 RGB buckets, then take top colors.
+    /**
+     * Popularity quantizer on 5-5-5 buckets, then map every unique bucket to a
+     * palette index once. Per-pixel nearest-neighbor against 256 colors is far
+     * too slow for 1080p frame sequences.
+     */
+    private fun quantize(pixels: IntArray, maxColors: Int): Pair<IntArray, ByteArray> {
         val counts = HashMap<Int, Int>(min(pixels.size, 4096))
-        for (pixel in pixels) {
-            val r = (Color.red(pixel) ushr 3) shl 10
-            val g = (Color.green(pixel) ushr 3) shl 5
-            val b = Color.blue(pixel) ushr 3
-            val key = r or g or b
+        val keys = IntArray(pixels.size)
+        for (i in pixels.indices) {
+            val pixel = pixels[i]
+            val key = ((Color.red(pixel) ushr 3) shl 10) or
+                ((Color.green(pixel) ushr 3) shl 5) or
+                (Color.blue(pixel) ushr 3)
+            keys[i] = key
             counts[key] = (counts[key] ?: 0) + 1
         }
         val sorted = counts.entries.sortedByDescending { it.value }
         val take = min(maxColors, sorted.size).coerceAtLeast(2)
-        return IntArray(take) { i ->
+        val palette = IntArray(take) { i ->
             val key = sorted[i].key
-            val r = ((key ushr 10) and 0x1F) * 255 / 31
-            val g = ((key ushr 5) and 0x1F) * 255 / 31
-            val b = (key and 0x1F) * 255 / 31
-            Color.rgb(r, g, b)
+            Color.rgb(
+                ((key ushr 10) and 0x1F) * 255 / 31,
+                ((key ushr 5) and 0x1F) * 255 / 31,
+                (key and 0x1F) * 255 / 31,
+            )
         }
+        val paletteKeys = IntArray(take) { sorted[it].key }
+        val keyToIndex = HashMap<Int, Int>(counts.size)
+        for (i in 0 until take) {
+            keyToIndex[paletteKeys[i]] = i
+        }
+        for (key in counts.keys) {
+            if (key !in keyToIndex) {
+                keyToIndex[key] = nearestBucket(key, paletteKeys)
+            }
+        }
+        val indexed = ByteArray(pixels.size)
+        for (i in keys.indices) {
+            indexed[i] = keyToIndex.getValue(keys[i]).toByte()
+        }
+        return palette to indexed
     }
 
-    private fun nearestIndex(color: Int, palette: IntArray): Int {
-        val r = Color.red(color)
-        val g = Color.green(color)
-        val b = Color.blue(color)
+    private fun nearestBucket(key: Int, paletteKeys: IntArray): Int {
+        val r = (key ushr 10) and 0x1F
+        val g = (key ushr 5) and 0x1F
+        val b = key and 0x1F
         var best = 0
         var bestDist = Int.MAX_VALUE
-        for (i in palette.indices) {
-            val pr = Color.red(palette[i])
-            val pg = Color.green(palette[i])
-            val pb = Color.blue(palette[i])
-            val dr = r - pr
-            val dg = g - pg
-            val db = b - pb
+        for (i in paletteKeys.indices) {
+            val pk = paletteKeys[i]
+            val dr = r - ((pk ushr 10) and 0x1F)
+            val dg = g - ((pk ushr 5) and 0x1F)
+            val db = b - (pk and 0x1F)
             val dist = dr * dr + dg * dg + db * db
             if (dist < bestDist) {
                 bestDist = dist
@@ -195,13 +212,13 @@ class GifSequenceEncoder {
         val maxCode = 4096
 
         val bitBuffer = BitAccumulator(out)
-        val dictionary = HashMap<String, Int>(512)
+        // (prefixCode << 8) | suffixByte. Single-byte codes 0..clear-1 are implicit.
+        val dictionary = HashMap<Int, Int>(512)
+
+        fun pack(prefix: Int, suffix: Int): Int = (prefix shl 8) or suffix
 
         fun resetDict() {
             dictionary.clear()
-            for (i in 0 until clear) {
-                dictionary[i.toChar().toString()] = i
-            }
             codeSize = minCodeSize + 1
             nextCode = end + 1
         }
@@ -216,15 +233,16 @@ class GifSequenceEncoder {
             return
         }
 
-        var w = (indexed[0].toInt() and 0xFF).toChar().toString()
+        var w = indexed[0].toInt() and 0xFF
         var i = 1
         while (i < indexed.size) {
-            val k = (indexed[i].toInt() and 0xFF).toChar()
-            val wk = w + k
-            if (dictionary.containsKey(wk)) {
-                w = wk
+            val k = indexed[i].toInt() and 0xFF
+            val wk = pack(w, k)
+            val existing = dictionary[wk]
+            if (existing != null) {
+                w = existing
             } else {
-                bitBuffer.writeBits(dictionary.getValue(w), codeSize)
+                bitBuffer.writeBits(w, codeSize)
                 if (nextCode < maxCode) {
                     dictionary[wk] = nextCode++
                     if (nextCode >= (1 shl codeSize) && codeSize < 12) {
@@ -234,11 +252,11 @@ class GifSequenceEncoder {
                     bitBuffer.writeBits(clear, codeSize)
                     resetDict()
                 }
-                w = k.toString()
+                w = k
             }
             i++
         }
-        bitBuffer.writeBits(dictionary.getValue(w), codeSize)
+        bitBuffer.writeBits(w, codeSize)
         bitBuffer.writeBits(end, codeSize)
         bitBuffer.flush()
         out.write(0) // block terminator

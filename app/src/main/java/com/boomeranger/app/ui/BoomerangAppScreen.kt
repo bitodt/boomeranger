@@ -351,15 +351,13 @@ private fun ExportSettingsPanel(
                 labelOf = { "${it.label} fps" },
                 onSelected = onFrameRate,
             )
-        }
-        Text("Resolution", style = MaterialTheme.typography.titleMedium, color = Sand)
-        SegmentedSelector(
-            options = ResolutionOption.entries,
-            selected = state.settings.resolution,
-            labelOf = { it.label },
-            onSelected = onResolution,
-        )
-        if (!isGif) {
+            Text("Resolution", style = MaterialTheme.typography.titleMedium, color = Sand)
+            SegmentedSelector(
+                options = ResolutionOption.entries,
+                selected = state.settings.resolution,
+                labelOf = { it.label },
+                onSelected = onResolution,
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -388,7 +386,7 @@ private fun ExportSettingsPanel(
             }
         } else {
             Text(
-                "GIF exports are silent and locked to 30 fps for smaller, smoother loops.",
+                "GIF exports are silent, locked to 30 fps, and capped at 480p so they encode faster.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Mist.copy(alpha = 0.65f),
             )
