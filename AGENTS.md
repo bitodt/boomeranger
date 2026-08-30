@@ -63,6 +63,7 @@ com.boomeranger.app
 - `media/BitmapFrameExtractor.kt` — oriented frame JPEGs to disk
 - `media/YuvConverter.kt` + `FrameSequenceEncoder.kt` — H.264 encode
 - `media/ReverseVideoBuilder.kt` — reverse segment assembly
+- `media/GifSequenceEncoder.kt` + `GifColorQuantizer.kt` + `GifLzwEncoder.kt` — CPU GIF89a (unique-frame cache, LUT, parallel LZW)
 - `media/VideoConcatenationService.kt` — Media3 `(F+R)×N`
 - `media/Media3TransformHelper.kt` — Transformer coroutine wrapper, HDR tone-map
 
