@@ -82,7 +82,7 @@ See [AGENTS.md](AGENTS.md) for pipeline details and extension points.
 - **Not bit-exact.** Output preserves resolution by default and uses a high-quality bitrate heuristic; codec/GOP/bitrate are not cloned bit-for-bit.
 - **HDR → SDR.** Bitmap frame extraction and the reverse path are SDR. Media3 forward/concat uses tone-map-to-SDR so color spaces stay consistent. Devices that cannot tone-map fail with a clear error.
 - **Audio.** Default export is muted. The app does not synthesize reverse audio.
-- **Memory / time.** Reverse generation for 3s high-resolution clips is CPU and I/O heavy (JPEG frame cache + H.264 encode).
+- **Memory / time.** Reverse generation for 3s high-resolution clips is CPU and I/O heavy (JPEG frame cache + H.264 encode). GIF encode is CPU (palette + LZW); the GPU is already used for the Media3 trim/scale step, not for LZW.
 - **Input focus.** Common MP4/H.264 inputs are the primary supported path.
 
 ## Permissions
