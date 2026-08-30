@@ -63,6 +63,7 @@ com.boomeranger.app
 - `media/BitmapFrameExtractor.kt` — oriented frame JPEGs to disk
 - `media/YuvConverter.kt` + `FrameSequenceEncoder.kt` — H.264 encode
 - `media/ReverseVideoBuilder.kt` — reverse segment assembly
+- `media/GifSequenceEncoder.kt` + `GifColorQuantizer.kt` + `GifLzwEncoder.kt` — CPU GIF89a (unique-frame cache, LUT, parallel LZW)
 - `media/VideoConcatenationService.kt` — Media3 `(F+R)×N`
 - `media/Media3TransformHelper.kt` — Transformer coroutine wrapper, HDR tone-map
 
@@ -111,7 +112,8 @@ SAF Uri
 | Bitrate heuristic | `util/BitrateCalculator.kt` |
 | Frame rate options (30/60) | `model/FrameRateOption.kt` + UI selector + `BitmapFrameExtractor` |
 | Speed options (1x/2x/4x) | `model/SpeedOption.kt` + encoder/GIF delay multipliers |
-| Export format (MP4/GIF) | `model/ExportFormat.kt` + `GifSequenceEncoder.kt` + use case branch |
+| Export format (MP4/GIF) | `model/ExportFormat.kt` + `GifSequenceEncoder.kt` / `GifColorQuantizer.kt` / `GifLzwEncoder.kt` + use case branch |
+| GIF encode speed | Unique-frame cache + parallel CPU in `GifSequenceEncoder.kt`; not GPU (LZW is sequential) |
 | Mute default | `model/ExportSettings.kt` |
 | Reverse quality (JPEG 95, fps) | `media/BitmapFrameExtractor.kt`, `FrameSequenceEncoder.kt` |
 | Concat / Media3 mime / HDR mode | `media/Media3TransformHelper.kt` |

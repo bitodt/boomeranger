@@ -1,21 +1,35 @@
 package com.boomeranger.app.media
 
-import android.graphics.Bitmap
-import android.graphics.Color
 import com.boomeranger.app.util.AppLogger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.io.OutputStream
-import kotlin.math.min
+import kotlin.math.max
 
 /**
  * Encodes a frame sequence (in-memory bitmaps or JPEG files) into a looping GIF89a.
  *
- * Uses a per-frame popularity palette (256 colors) + LZW. Suitable for short
- * boomerang clips; large resolution × high fps exports can produce big files.
+ * Why this is CPU work, not GPU:
+ * - GIF has no hardware encoder on Android.
+ * - LZW is sequential (each code depends on the previous).
+ * - Palette mapping is data-parallel, but a 15-bit CPU lookup table beats
+ *   uploading each frame to the GPU and reading indices back.
+ * Media3 already uses the GPU for the earlier trim/scale step.
+ *
+ * Speed tactics:
+ * - One global 256-color palette + lookup table for the whole clip
+ * - Encode each unique [FrameHandle] once (boomerang repeats 2–4 cycles)
+ * - Parallel unique-frame encode on [Dispatchers.Default]
  */
 class GifSequenceEncoder {
 
-    fun encode(
+    suspend fun encode(
         frames: List<FrameHandle>,
         outputFile: File,
         frameRate: Float,
@@ -25,6 +39,7 @@ class GifSequenceEncoder {
         onProgress: (Float) -> Unit = {},
     ) {
         require(frames.size >= 2) { "GIF needs at least 2 frames." }
+        require(width >= 2 && height >= 2) { "GIF size must be at least 2x2." }
         outputFile.parentFile?.mkdirs()
         if (outputFile.exists()) outputFile.delete()
 
@@ -34,38 +49,153 @@ class GifSequenceEncoder {
         // GIF delay unit is 1/100s.
         val delayCs = (100f / playbackFps).toInt().coerceIn(1, 20)
 
+        val uniqueFrames = frames.distinct()
+        val startedAt = System.nanoTime()
+
+        val palette = buildGlobalPalette(uniqueFrames, width, height)
+        val lookupTable = GifColorQuantizer.buildLookupTable(palette)
+        val minCodeSize = 8 // 256-color global table
+        onProgress(0.08f)
+
+        val encodedByFrame = encodeUniqueFrames(
+            uniqueFrames = uniqueFrames,
+            width = width,
+            height = height,
+            lookupTable = lookupTable,
+            minCodeSize = minCodeSize,
+            onProgress = { p -> onProgress(0.08f + p * 0.84f) },
+        )
+
         outputFile.outputStream().use { out ->
             writeString(out, "GIF89a")
             writeLogicalScreen(out, width, height)
+            writeGlobalColorTable(out, palette)
             writeNetscapeLoop(out)
 
-            frames.forEachIndexed { index, frame ->
-                val opened = frame.openBitmap(width, height)
-                try {
-                    writeFrame(out, opened.bitmap, delayCs)
-                } finally {
-                    opened.recycleIfOwned()
-                }
-                onProgress((index + 1).toFloat() / frames.size)
+            for (frame in frames) {
+                val lzw = encodedByFrame[frame]
+                    ?: error("Missing encoded GIF data for a cycle frame.")
+                writeGraphicsControl(out, delayCs)
+                writeImageDescriptor(out, width, height)
+                out.write(minCodeSize)
+                out.write(lzw)
             }
 
             out.write(0x3B) // trailer
             out.flush()
         }
 
+        val elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L
         AppLogger.i(
-            "Encoded GIF ${outputFile.name}: ${frames.size} frames " +
-                "@ ${playbackFps}fps (${speed}x), ${outputFile.length()} bytes"
+            "Encoded GIF ${outputFile.name}: ${frames.size} cycle frames " +
+                "(${uniqueFrames.size} unique) @ ${playbackFps}fps (${speed}x), " +
+                "${outputFile.length()} bytes in ${elapsedMs}ms"
         )
+        onProgress(1f)
+    }
+
+    private fun buildGlobalPalette(
+        uniqueFrames: List<FrameHandle>,
+        width: Int,
+        height: Int,
+    ): IntArray {
+        val sources = pickPaletteSources(uniqueFrames)
+        val samples = ArrayList<Int>(sources.size * 8_192)
+        val targetSamples = 180_000
+        val pixelsPerFrame = width * height
+        val stride = max(1, (pixelsPerFrame * sources.size) / targetSamples)
+        val scratch = IntArray(pixelsPerFrame)
+
+        for (frame in sources) {
+            val opened = frame.openBitmap(width, height)
+            try {
+                opened.bitmap.getPixels(scratch, 0, width, 0, 0, width, height)
+                var i = 0
+                while (i < scratch.size) {
+                    samples += scratch[i]
+                    i += stride
+                }
+            } finally {
+                opened.recycleIfOwned()
+            }
+        }
+        if (samples.size < 2) {
+            samples += 0
+            samples += 0x00FFFFFF
+        }
+        return GifColorQuantizer.buildPalette(samples.toIntArray())
+    }
+
+    private fun pickPaletteSources(uniqueFrames: List<FrameHandle>): List<FrameHandle> {
+        if (uniqueFrames.size <= 6) return uniqueFrames
+        val last = uniqueFrames.lastIndex
+        val indexes = listOf(0, last / 4, last / 2, (last * 3) / 4, last).distinct()
+        return indexes.map { uniqueFrames[it] }
+    }
+
+    private suspend fun encodeUniqueFrames(
+        uniqueFrames: List<FrameHandle>,
+        width: Int,
+        height: Int,
+        lookupTable: ByteArray,
+        minCodeSize: Int,
+        onProgress: (Float) -> Unit,
+    ): Map<FrameHandle, ByteArray> = coroutineScope {
+        val completed = java.util.concurrent.atomic.AtomicInteger(0)
+        val progressLock = Mutex()
+        uniqueFrames.map { frame ->
+            async(Dispatchers.Default) {
+                ensureActive()
+                val lzw = encodeOneFrame(frame, width, height, lookupTable, minCodeSize)
+                val done = completed.incrementAndGet()
+                progressLock.withLock {
+                    onProgress(done.toFloat() / uniqueFrames.size)
+                }
+                frame to lzw
+            }
+        }.awaitAll().toMap()
+    }
+
+    private fun encodeOneFrame(
+        frame: FrameHandle,
+        width: Int,
+        height: Int,
+        lookupTable: ByteArray,
+        minCodeSize: Int,
+    ): ByteArray {
+        val opened = frame.openBitmap(width, height)
+        try {
+            val pixels = IntArray(width * height)
+            opened.bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+            val indexed = GifColorQuantizer.indexPixels(pixels, lookupTable)
+            return GifLzwEncoder.encode(indexed, minCodeSize)
+        } finally {
+            opened.recycleIfOwned()
+        }
     }
 
     private fun writeLogicalScreen(out: OutputStream, width: Int, height: Int) {
         writeShort(out, width)
         writeShort(out, height)
-        // Global color table flag off; will use local tables per frame.
-        out.write(0x00)
+        // Global color table, 8-bit color resolution, 256 entries.
+        out.write(0xF7)
         out.write(0x00) // background color index
         out.write(0x00) // pixel aspect ratio
+    }
+
+    private fun writeGlobalColorTable(out: OutputStream, palette: IntArray) {
+        for (i in 0 until GifColorQuantizer.MAX_COLORS) {
+            if (i < palette.size) {
+                val c = palette[i]
+                out.write(GifColorQuantizer.red(c))
+                out.write(GifColorQuantizer.green(c))
+                out.write(GifColorQuantizer.blue(c))
+            } else {
+                out.write(0)
+                out.write(0)
+                out.write(0)
+            }
+        }
     }
 
     private fun writeNetscapeLoop(out: OutputStream) {
@@ -79,19 +209,7 @@ class GifSequenceEncoder {
         out.write(0x00)
     }
 
-    private fun writeFrame(out: OutputStream, bitmap: Bitmap, delayCs: Int) {
-        val width = bitmap.width
-        val height = bitmap.height
-        val pixels = IntArray(width * height)
-        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-
-        val palette = buildPalette(pixels, maxColors = 256)
-        val indexed = ByteArray(pixels.size)
-        for (i in pixels.indices) {
-            indexed[i] = nearestIndex(pixels[i], palette).toByte()
-        }
-
-        // Graphics Control Extension
+    private fun writeGraphicsControl(out: OutputStream, delayCs: Int) {
         out.write(0x21)
         out.write(0xF9)
         out.write(0x04)
@@ -99,145 +217,15 @@ class GifSequenceEncoder {
         writeShort(out, delayCs)
         out.write(0x00) // transparent color index
         out.write(0x00)
+    }
 
-        // Image Descriptor
+    private fun writeImageDescriptor(out: OutputStream, width: Int, height: Int) {
         out.write(0x2C)
         writeShort(out, 0)
         writeShort(out, 0)
         writeShort(out, width)
         writeShort(out, height)
-        val paletteSize = palette.size
-        val sizeFlag = paletteSizeToFlag(paletteSize)
-        out.write(0x80 or sizeFlag) // local color table flag + size
-
-        // Local color table (padded to 2^(sizeFlag+1) entries)
-        val tableEntries = 1 shl (sizeFlag + 1)
-        for (i in 0 until tableEntries) {
-            if (i < palette.size) {
-                val c = palette[i]
-                out.write(Color.red(c))
-                out.write(Color.green(c))
-                out.write(Color.blue(c))
-            } else {
-                out.write(0)
-                out.write(0)
-                out.write(0)
-            }
-        }
-
-        val minCodeSize = (sizeFlag + 1).coerceAtLeast(2)
-        out.write(minCodeSize)
-        writeLzw(out, indexed, minCodeSize)
-    }
-
-    private fun buildPalette(pixels: IntArray, maxColors: Int): IntArray {
-        // Popularity quantizer on 5-5-5 RGB buckets, then take top colors.
-        val counts = HashMap<Int, Int>(min(pixels.size, 4096))
-        for (pixel in pixels) {
-            val r = (Color.red(pixel) ushr 3) shl 10
-            val g = (Color.green(pixel) ushr 3) shl 5
-            val b = Color.blue(pixel) ushr 3
-            val key = r or g or b
-            counts[key] = (counts[key] ?: 0) + 1
-        }
-        val sorted = counts.entries.sortedByDescending { it.value }
-        val take = min(maxColors, sorted.size).coerceAtLeast(2)
-        return IntArray(take) { i ->
-            val key = sorted[i].key
-            val r = ((key ushr 10) and 0x1F) * 255 / 31
-            val g = ((key ushr 5) and 0x1F) * 255 / 31
-            val b = (key and 0x1F) * 255 / 31
-            Color.rgb(r, g, b)
-        }
-    }
-
-    private fun nearestIndex(color: Int, palette: IntArray): Int {
-        val r = Color.red(color)
-        val g = Color.green(color)
-        val b = Color.blue(color)
-        var best = 0
-        var bestDist = Int.MAX_VALUE
-        for (i in palette.indices) {
-            val pr = Color.red(palette[i])
-            val pg = Color.green(palette[i])
-            val pb = Color.blue(palette[i])
-            val dr = r - pr
-            val dg = g - pg
-            val db = b - pb
-            val dist = dr * dr + dg * dg + db * db
-            if (dist < bestDist) {
-                bestDist = dist
-                best = i
-            }
-        }
-        return best
-    }
-
-    private fun paletteSizeToFlag(size: Int): Int {
-        var entries = 2
-        var flag = 0
-        while (entries < size && flag < 7) {
-            entries = entries shl 1
-            flag++
-        }
-        return flag
-    }
-
-    private fun writeLzw(out: OutputStream, indexed: ByteArray, minCodeSize: Int) {
-        val clear = 1 shl minCodeSize
-        val end = clear + 1
-        var codeSize = minCodeSize + 1
-        var nextCode = end + 1
-        val maxCode = 4096
-
-        val bitBuffer = BitAccumulator(out)
-        val dictionary = HashMap<String, Int>(512)
-
-        fun resetDict() {
-            dictionary.clear()
-            for (i in 0 until clear) {
-                dictionary[i.toChar().toString()] = i
-            }
-            codeSize = minCodeSize + 1
-            nextCode = end + 1
-        }
-
-        resetDict()
-        bitBuffer.writeBits(clear, codeSize)
-
-        if (indexed.isEmpty()) {
-            bitBuffer.writeBits(end, codeSize)
-            bitBuffer.flush()
-            out.write(0)
-            return
-        }
-
-        var w = (indexed[0].toInt() and 0xFF).toChar().toString()
-        var i = 1
-        while (i < indexed.size) {
-            val k = (indexed[i].toInt() and 0xFF).toChar()
-            val wk = w + k
-            if (dictionary.containsKey(wk)) {
-                w = wk
-            } else {
-                bitBuffer.writeBits(dictionary.getValue(w), codeSize)
-                if (nextCode < maxCode) {
-                    dictionary[wk] = nextCode++
-                    if (nextCode >= (1 shl codeSize) && codeSize < 12) {
-                        codeSize++
-                    }
-                } else {
-                    bitBuffer.writeBits(clear, codeSize)
-                    resetDict()
-                }
-                w = k.toString()
-            }
-            i++
-        }
-        bitBuffer.writeBits(dictionary.getValue(w), codeSize)
-        bitBuffer.writeBits(end, codeSize)
-        bitBuffer.flush()
-        out.write(0) // block terminator
+        out.write(0x00) // no local color table
     }
 
     private fun writeShort(out: OutputStream, value: Int) {
@@ -247,43 +235,5 @@ class GifSequenceEncoder {
 
     private fun writeString(out: OutputStream, value: String) {
         for (ch in value) out.write(ch.code)
-    }
-
-    /** Packs LZW codes into GIF sub-blocks of ≤255 bytes. */
-    private class BitAccumulator(private val out: OutputStream) {
-        private var acc = 0
-        private var bits = 0
-        private val block = ByteArray(255)
-        private var blockLen = 0
-
-        fun writeBits(code: Int, codeSize: Int) {
-            acc = acc or (code shl bits)
-            bits += codeSize
-            while (bits >= 8) {
-                appendByte(acc and 0xFF)
-                acc = acc ushr 8
-                bits -= 8
-            }
-        }
-
-        fun flush() {
-            if (bits > 0) {
-                appendByte(acc and 0xFF)
-                acc = 0
-                bits = 0
-            }
-            if (blockLen > 0) flushBlock()
-        }
-
-        private fun appendByte(value: Int) {
-            block[blockLen++] = value.toByte()
-            if (blockLen == 255) flushBlock()
-        }
-
-        private fun flushBlock() {
-            out.write(blockLen)
-            out.write(block, 0, blockLen)
-            blockLen = 0
-        }
     }
 }
